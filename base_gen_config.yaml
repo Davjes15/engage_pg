@@ -55,7 +55,7 @@ sampling:
 
 powerflow:
   init: "results"
-  enforce_q_lims: true
+  enforce_q_lims: True
   delta_q: 0.0
 
 filtering:

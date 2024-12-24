@@ -1,0 +1,3 @@
+[submodule "powerdata-gen"]
+	path = powerdata-gen
+	url = https://github.com/bdonon/powerdata-gen.git
