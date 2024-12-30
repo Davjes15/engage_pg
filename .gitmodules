@@ -1,3 +1,6 @@
 [submodule "powerdata-gen"]
 	path = powerdata-gen
 	url = https://github.com/bdonon/powerdata-gen.git
+[submodule "ggme"]
+	path = ggme
+	url = https://github.com/BorgwardtLab/ggme.git
