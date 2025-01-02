@@ -12,13 +12,14 @@ from torch_geometric.nn import GCNConv, ARMAConv
 # IEEE Transactions on Power Systems, vol. 38, no. 3, pp. 2423–2433, May 2023,
 # doi: 10.1109/TPWRS.2022.3195301.
 class ARMA_GNN(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim=7):
         super().__init__()
+        self.input_dim = input_dim # from kwargs
         self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
         self.leakyReLU_small = nn.LeakyReLU(negative_slope=0.0)
 
         # Pre-processing layers
-        self.predense1_node = nn.Linear(7, 64)
+        self.predense1_node = nn.Linear(self.input_dim, 64)
         self.predense2_node = nn.Linear(64, 64)
         self.predense1_edge = nn.Linear(4, 16)
         self.predense2_edge = nn.Linear(16, 1)
@@ -34,7 +35,7 @@ class ARMA_GNN(nn.Module):
         self.readout = nn.Linear(64, 4)
 
     def forward(self, data):
-        x = torch.nan_to_num(data.x, nan=0.0) # dim=(N, 7)
+        x = torch.nan_to_num(data.x, nan=0.0) # dim=(N, self.input_dim)
         edge_index = data.edge_index # dim=(2, 2E)
         # edge_attr = torch.nan_to_num(data.edge_attr, nan=0.0) # dim=(2E, 4)
         
@@ -58,15 +59,16 @@ class ARMA_GNN(nn.Module):
 
 # GCN class - custom GCN class w/ similar number of params as ARMA_GNN.
 class GCN(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim=7):
         super().__init__()
         # Constants
+        self.input_dim = input_dim
         self.num_gcn_layers = 8
         self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
         self.leakyReLU_small = nn.LeakyReLU(negative_slope=0.005)
 
         # Pre-processing layers
-        self.predense1_node = nn.Linear(7, 64)
+        self.predense1_node = nn.Linear(self.input_dim, 64)
         self.predense2_node = nn.Linear(64, 64)
         self.predense1_edge = nn.Linear(4, 16)
         self.predense2_edge = nn.Linear(16, 1)
@@ -83,7 +85,7 @@ class GCN(nn.Module):
         self.readout = nn.Linear(64, 4)
 
     def forward(self, data):
-        x = torch.nan_to_num(data.x, nan=0.0) # dim=(N, 7)
+        x = torch.nan_to_num(data.x, nan=0.0) # dim=(N, self.input_dim)
         edge_index = data.edge_index # dim=(2, 2E)
         edge_attr = torch.nan_to_num(data.edge_attr, nan=0.0) # dim=(2E, 4)
         

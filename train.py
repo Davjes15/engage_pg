@@ -10,21 +10,47 @@ import os
 import sys
 
 from models import GCN, ARMA_GNN
+from graph_utils import get_pyg_graphs, add_augmented_features
+
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--training",
+    default='1-LV-rural1--0-no_sw',
+)
+parser.add_argument(
+    "--testing",
+    default='1-LV-rural3--0-no_sw',
+)
+parser.add_argument(
+    "--preprocess",
+    action="store_true"
+)
+parser.add_argument(
+    "--cycles",
+    action="store_true"
+)
+parser.add_argument(
+    "--paths",
+    action="store_true"
+)
+args = parser.parse_args()
 
 torch.manual_seed(12)
 
 # Tunables and other options
 P = OrderedDict([
     ('model', 'gcn'), # Model: 'gcn', 'arma_gnn'
-    ('ouput_base_dir', 'outputs/2024-12-30_19:23:46/'),
-    ('training_grid', '1-LV-rural1--0-no_sw'),
-    ('testing_grid', '1-LV-rural3--0-no_sw'), # similar but diff grid
-    # ('testing_grid', '1-MV-comm--0-no_sw'), # very diff grid
-    ('epochs', 1000), # Number of epochs
+    ('output_base_dir', 'outputs/2024-12-30_19:23:46/'),
+    ('training_grid', args.training),
+    ('testing_grid', args.testing), 
+    ('preprocess', args.preprocess),
+    ('epochs', 2000), # Number of epochs
     ('learning_rate', 1e-3),
     ('batch_size', 16),
     ('early_stopping', True),
-    ('patience', 100), # Patience for early stopping
+    ('patience', 500), # Patience for early stopping
     ('best_val_weights', True), # Return best validation weights
     ('plot_loss', True),
     ('save_model', False),
@@ -52,8 +78,8 @@ model_classes = {'gcn': GCN, 'arma_gnn': ARMA_GNN}
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
+    # else "mps"
+    # if torch.backends.mps.is_available()
     else "cpu"
 )
 print(f"Training using {device}", flush=True)
@@ -63,22 +89,38 @@ print(P, flush=True)
 # LOAD TRAINING AND VALIDATION DATASETS
 ##########################################################################
 
-def get_pyg_graphs(ouput_base_dir, grid_type, split='train'):
-    dataset_path = os.path.join(ouput_base_dir, grid_type, split, f'dataset_{split}.pt')
-    pyg_dataset = torch.load(dataset_path, weights_only=False)
+def preprocess(pyg_dataset):
     return pyg_dataset
 
-loader_train = DataLoader(get_pyg_graphs(P['ouput_base_dir'], P['training_grid'], split='train'),
+def get_dataset(output_base_dir, grid_type, split='train', preprocess=False):
+    pyg_dataset = get_pyg_graphs(output_base_dir, grid_type, split)
+    if preprocess:
+        pyg_dataset = add_augmented_features(pyg_dataset,
+                                             cycles=args.cycles,
+                                             path_lengths=args.paths)
+    return pyg_dataset
+
+loader_train = DataLoader(get_dataset(P['output_base_dir'],
+                                         P['training_grid'],
+                                         split='train',
+                                         preprocess=P['preprocess']),
                           batch_size=P['batch_size'])
-loader_val = DataLoader(get_pyg_graphs(P['ouput_base_dir'], P['training_grid'], split='val'),
+loader_val = DataLoader(get_dataset(P['output_base_dir'],
+                                       P['training_grid'],
+                                       split='val',
+                                       preprocess=P['preprocess']),
                         batch_size=P['batch_size'])
-loader_test = DataLoader(get_pyg_graphs(P['ouput_base_dir'], P['testing_grid'], split='train'),
+loader_test = DataLoader(get_dataset(P['output_base_dir'],
+                                        P['testing_grid'],
+                                        split='train',
+                                        preprocess=P['preprocess']),
                          batch_size=P['batch_size'])
 
 ##########################################################################
 # MODEL SETUP AND TRAINING
 ##########################################################################
-model = model_classes[P['model']]().to(device)
+input_dim = next(iter(loader_train)).x.shape[1]
+model = model_classes[P['model']](input_dim=input_dim).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 loss_fn = nn.MSELoss()
 
@@ -137,6 +179,7 @@ train_time = time.time() - start
 print(f"Total Training Time (s): {train_time}", flush=True)
 
 if restore_best_weights == True:
+    print('Best Validation Loss:', best_val_loss)
     model.load_state_dict(best_weights)
 
 if P['save_model'] == True:
@@ -153,6 +196,7 @@ if P['plot_loss'] == True:
     ax.set_xlabel('Epochs')
     ax.set_ylabel('Loss')
     ax.legend()
+    ax.set_title(f"{P['model']} {'with' if P['preprocess'] else 'without'} augmented features")
     plt.show(block=True)
 
 ##########################################################################
