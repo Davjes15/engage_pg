@@ -6,9 +6,11 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+import pandas as pd
 import numpy as np
 import torch
 from torch_geometric.utils import to_networkx
+from torch_geometric.data import Data
 import networkx as nx
 import simbench as sb
 
@@ -23,8 +25,16 @@ def get_pyg_graphs(ouput_base_dir, grid_type, split='train'):
     pyg_dataset = torch.load(dataset_path, weights_only=False)
     return pyg_dataset
 
-def get_networkx_graph(data):
-    return to_networkx(data, node_attrs=['x', 'y'], edge_attrs=['edge_attr'], to_undirected='upper')
+def get_networkx_graph(data, include_features=True):
+    if include_features:
+        return to_networkx(data, node_attrs=['x', 'y'], edge_attrs=['edge_attr'], to_undirected='upper')
+    else:
+        return to_networkx(data, to_undirected='upper')
+
+def get_pp_sources(ouput_base_dir, grid_type, split='train'):
+    dataset_source_path = os.path.join(ouput_base_dir, grid_type, split, f'dataset_{split}_src.csv')
+    sources = pd.read_csv(dataset_source_path, index_col=0)['src'].to_list()
+    return sources
 
 def get_cycle_lengths(nx_graph):
     cycles = nx.cycle_basis(nx_graph)
