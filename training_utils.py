@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import random_split
 from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 import pandapower as pp
@@ -21,6 +22,8 @@ from metrics.kernels import gaussian_kernel
 from metrics.descriptor_functions import degree_distribution, normalised_laplacian_spectrum
 # Reset path
 sys.path.pop()
+
+TRAIN_VAL_SPLIT = [0.8, 0.2]
 
 def create_log_dir(model_classname):
     log_dir = os.path.join('out',
@@ -51,13 +54,13 @@ def setup_pytorch_and_get_device():
     return device
 
 def get_dataset(data_dir,
-                grid_type, split='train',
+                grid_type,
                 include_sources=False,
                 cycles=False,
                 path_lengths=False):
-    pyg_dataset = get_pyg_graphs(data_dir, grid_type, split)
+    pyg_dataset = get_pyg_graphs(data_dir, grid_type)
     if include_sources:
-        pp_sources = get_pp_sources(data_dir, grid_type, split)
+        pp_sources = get_pp_sources(data_dir, grid_type)
         for data, src in zip(pyg_dataset, pp_sources):
             data.src = src
     if cycles or path_lengths:
@@ -75,24 +78,20 @@ def get_dataloaders(data_dir,
                     batch_size=16):
     loader_train = loader_val = loader_test = None
     if training_grid:
-        loader_train = DataLoader(get_dataset(data_dir,
-                                              training_grid,
-                                              split='train',
-                                              include_sources=include_sources,
-                                              cycles=add_cycles,
-                                              path_lengths=add_path_lengths),
+        train_dataset = get_dataset(data_dir,
+                                    training_grid,
+                                    include_sources=include_sources,
+                                    cycles=add_cycles,
+                                    path_lengths=add_path_lengths)
+        train_split, val_split = random_split(train_dataset, TRAIN_VAL_SPLIT)
+
+        loader_train = DataLoader(train_split,
                                 batch_size=batch_size)
-        loader_val = DataLoader(get_dataset(data_dir,
-                                            training_grid,
-                                            split='val',
-                                            include_sources=include_sources,
-                                            cycles=add_cycles,
-                                            path_lengths=add_path_lengths),
+        loader_val = DataLoader(val_split,
                                 batch_size=batch_size)
     if testing_grid:
         loader_test = DataLoader(get_dataset(data_dir,
                                             testing_grid,
-                                            split='train',
                                             include_sources=include_sources,
                                             cycles=add_cycles,
                                             path_lengths=add_path_lengths),

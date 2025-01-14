@@ -19,9 +19,14 @@ from training_utils import (
     test_dc_opf,
     evaluate_mmd
 )
+from graph_utils import get_dist_grid_codes
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--data_dir",
+        required=True,
+    )
     parser.add_argument(
         "--model",
         default='gcn',
@@ -34,6 +39,11 @@ def parse_args():
     parser.add_argument(
         "--save_results",
         action="store_true"
+    )
+    parser.add_argument(
+        "--scenario",
+        type=int,
+        default=0,
     )
     args = parser.parse_args()
     return args
@@ -149,10 +159,12 @@ def evaluate_tl_mmd(data_dir, training_grid_code, testing_grid_code):
     
     return mmd_degree, mmd_laplacian
 
-DATA_DIR = 'outputs/2024-12-30_19:23:46/'
+# DATA_DIR = 'outputs/2024-12-30_19:23:46/'
 
 if __name__ == '__main__':
     args = parse_args()
+
+    DATA_DIR = args.data_dir
 
     # Get model
     model_classes = {'gcn': GCN, 'arma_gnn': ARMA_GNN}
@@ -162,12 +174,7 @@ if __name__ == '__main__':
     epochs = args.epochs
 
     # Grids to compare pairwise
-    grids_to_compare = [
-        '1-LV-rural1--0-no_sw',
-        '1-LV-urban6--0-no_sw',
-        '1-MV-rural--0-no_sw',
-        '1-MV-urban--0-no_sw'
-    ]
+    grids_to_compare = get_dist_grid_codes(scenario=args.scenario)
     test_cases = get_performance_test_cases(grids_to_compare)
     
     # Variations of each pairwise comparison (add_cycles, add_path_lengths)
