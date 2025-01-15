@@ -32,6 +32,11 @@ def parse_args():
         default='gcn',
     )
     parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=100,
@@ -62,6 +67,7 @@ def evaluate_performance(data_dir,
                          model_class,
                          training_grid_code,
                          testing_grid_code,
+                         batch_size=16,
                          epochs=1000,
                          add_cycles=False,
                          add_path_lengths=False,
@@ -94,7 +100,8 @@ def evaluate_performance(data_dir,
         testing_grid=testing_grid_code,
         include_sources=False,
         add_cycles=add_cycles,
-        add_path_lengths=add_path_lengths)
+        add_path_lengths=add_path_lengths,
+        batch_size=batch_size)
 
     # Create model
     input_dim = next(iter(loader_train)).x.shape[1]
@@ -142,7 +149,10 @@ def evaluate_dc_opf(data_dir, testing_grid_code):
     nrmse_test = test_dc_opf(loader_test)
     return nrmse_test
 
-def evaluate_tl_mmd(data_dir, training_grid_code, testing_grid_code):
+def evaluate_tl_mmd(data_dir,
+                    training_grid_code,
+                    testing_grid_code,
+                    batch_size=16):
     # Get data loaders
     loader_train, loader_val, loader_test = get_dataloaders(
         data_dir=data_dir,
@@ -150,7 +160,8 @@ def evaluate_tl_mmd(data_dir, training_grid_code, testing_grid_code):
         testing_grid=testing_grid_code,
         include_sources=False,
         add_cycles=False,
-        add_path_lengths=False)
+        add_path_lengths=False,
+        batch_size=batch_size)
     
     mmd_degree, mmd_laplacian = evaluate_mmd(
         list(loader_test.dataset) + list(loader_val),
@@ -170,7 +181,8 @@ if __name__ == '__main__':
     model_classes = {'gcn': GCN, 'arma_gnn': ARMA_GNN}
     model_class = model_classes[args.model]
 
-    # Get num epochs
+    # Get training params
+    batch_size = args.batch_size
     epochs = args.epochs
 
     # Grids to compare pairwise
@@ -207,6 +219,7 @@ if __name__ == '__main__':
                               model_class=model_class,
                               training_grid_code=train_grid,
                               testing_grid_code=test_grid,
+                              batch_size=batch_size,
                               epochs=epochs,
                               add_cycles=add_cycles,
                               add_path_lengths=add_path_lengths)
@@ -248,7 +261,8 @@ if __name__ == '__main__':
     for train_grid, test_grid in tqdm(test_cases):
         mmd_degree, mmd_laplacian = evaluate_tl_mmd(DATA_DIR,
                                                     train_grid,
-                                                    test_grid)
+                                                    test_grid,
+                                                    batch_size)
         
         # Since distance is symmetric, check both directions.
         results_df.loc[

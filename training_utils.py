@@ -50,6 +50,7 @@ def setup_pytorch_and_get_device():
         # if torch.backends.mps.is_available()
         else "cpu"
     )
+    device = 'cpu'
     print(f"Training using {device}", flush=True)
     return device
 

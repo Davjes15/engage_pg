@@ -19,6 +19,11 @@ def parse_args():
         default='1-LV-rural3--0-no_sw',
     )
     parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=16,
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=100,
@@ -60,6 +65,7 @@ if __name__ == '__main__':
                              model_class=model_classes[args.model],
                              training_grid_code=args.training,
                              testing_grid_code=args.testing,
+                             batch_size=args.batch_size,
                              epochs=args.epochs,
                              add_cycles=args.cycles,
                              add_path_lengths=args.path_lengths,

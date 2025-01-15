@@ -59,6 +59,17 @@ def mmd(X, Y, kernel, estimate_variance=False):
     m = X.shape[0]
     n = Y.shape[0]
 
+    assert m > 0 and n > 0, "Distributions cannot be empty"
+
+    # mmd requires the num_samples >1 (to avoid divide by 0) so just repeat
+    # entry if this is the case.
+    if m == 1:
+        X = np.vstack([X,X])
+        m = X.shape[0]
+    if n == 1:
+        Y = np.vstack([Y,Y])
+        n = Y.shape[0]
+
     K_XX = kernel(X, X)
     K_YY = kernel(Y, Y)
     K_XY = kernel(X, Y)
