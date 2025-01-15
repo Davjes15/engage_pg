@@ -134,7 +134,7 @@ if __name__ == '__main__':
     test_cases = get_mmd_test_cases(grids_to_compare)
     results_df['mmd_degree'] = np.nan
     results_df['mmd_laplacian'] = np.nan
-    for train_grids, target in test_cases:
+    for train_grids, target in tqdm(test_cases):
         mmd_degree, mmd_laplacian = \
             evaluate_tl_mmd(data_dir=DATA_DIR,
                             training_grid_codes=train_grids,
