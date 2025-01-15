@@ -9,7 +9,7 @@ from tqdm import tqdm
 from models import GCN, ARMA_GNN
 from training_utils import (
     create_log_dir,
-    setup_logging,
+    setup_file_output,
     get_model_save_path,
     setup_pytorch,
     get_device,
@@ -70,15 +70,17 @@ def get_mmd_test_cases(grids_to_compare):
 
 def evaluate_performance(data_dir,
                          model_class,
-                         training_grid_code,
-                         testing_grid_code,
+                         training_grid_codes,
+                         testing_grid_codes,
                          batch_size=16,
                          epochs=1000,
+                         shuffle=False,
                          add_cycles=False,
                          add_path_lengths=False,
                          log_dir=None,
                          plot=False,
                          save_model=False,
+                         set_file_output=False,
                          experiment_id=0):
     # Log information about training run
     learning_rate=1e-3
@@ -88,8 +90,8 @@ def evaluate_performance(data_dir,
     print(locals(), flush=True)
 
     # Create artefacts for logging
-    if log_dir:
-        setup_logging(log_dir)
+    if set_file_output:
+        setup_file_output(log_dir)
 
     model_weights_path = ''
     if save_model or plot:
@@ -103,12 +105,13 @@ def evaluate_performance(data_dir,
     # Get data loaders
     loader_train, loader_val, loader_test = get_dataloaders(
         data_dir=data_dir,
-        training_grid=training_grid_code,
-        testing_grid=testing_grid_code,
+        training_grids=training_grid_codes,
+        testing_grids=testing_grid_codes,
         include_sources=False,
         add_cycles=add_cycles,
         add_path_lengths=add_path_lengths,
-        batch_size=batch_size)
+        batch_size=batch_size,
+        shuffle=shuffle)
 
     # Create model
     input_dim = next(iter(loader_train)).x.shape[1]
@@ -149,8 +152,8 @@ def evaluate_dc_opf(data_dir, testing_grid_code):
     # Get data loaders
     _, _, loader_test = get_dataloaders(
         data_dir=data_dir,
-        training_grid=None,
-        testing_grid=testing_grid_code,
+        training_grids=None,
+        testing_grids=[testing_grid_code],
         include_sources=True,
         add_cycles=False,
         add_path_lengths=False)
@@ -160,18 +163,16 @@ def evaluate_dc_opf(data_dir, testing_grid_code):
     return nrmse_test
 
 def evaluate_tl_mmd(data_dir,
-                    training_grid_code,
-                    testing_grid_code,
-                    batch_size=16):
+                    training_grid_codes,
+                    testing_grid_codes):
     # Get data loaders
     loader_train, loader_val, loader_test = get_dataloaders(
         data_dir=data_dir,
-        training_grid=training_grid_code,
-        testing_grid=testing_grid_code,
+        training_grids=training_grid_codes,
+        testing_grids=testing_grid_codes,
         include_sources=False,
         add_cycles=False,
-        add_path_lengths=False,
-        batch_size=batch_size)
+        add_path_lengths=False)
     
     mmd_degree, mmd_laplacian = evaluate_mmd(
         list(loader_test.dataset) + list(loader_val),
@@ -197,6 +198,7 @@ if __name__ == '__main__':
     epochs = args.epochs
     save_results = args.save_results
     plot = args.plot
+    log_dir = None
     if save_results or plot:
         log_dir = create_log_dir(model_class.__name__)
 
@@ -232,12 +234,15 @@ if __name__ == '__main__':
             nrmse_test, best_val_loss, train_time, total_epochs = \
                 evaluate_performance(data_dir=DATA_DIR,
                               model_class=model_class,
-                              training_grid_code=train_grid,
-                              testing_grid_code=test_grid,
+                              training_grid_codes=[train_grid],
+                              testing_grid_codes=[test_grid],
                               batch_size=batch_size,
                               epochs=epochs,
+                              shuffle=False,
                               add_cycles=add_cycles,
                               add_path_lengths=add_path_lengths,
+                              log_dir=log_dir,
+                              plot=plot,
                               experiment_id=i-1)
             performance_results.append(
                 (
@@ -271,21 +276,23 @@ if __name__ == '__main__':
     results_df = pd.DataFrame(performance_results, columns=column_names)
 
     # Save all results intermediately before we do next step.
-    results_file = os.path.join(log_dir, 'results.csv')
-    if save_results:
+    results_file = None
+    if log_dir:
+        results_file = os.path.join(log_dir, 'results.csv')
+    if save_results and results_file:
         results_df.to_csv(results_file)
         print(f'\nSaving intermediate results to: {results_file}')
 
     # Compare MMDs between train and test sets, and add to results df
-    print('\nCalculating MMDs\n')
+    print('Calculating MMDs...')
     test_cases = get_mmd_test_cases(grids_to_compare)
     results_df['mmd_degree'] = np.nan
     results_df['mmd_laplacian'] = np.nan
     for train_grid, test_grid in tqdm(test_cases):
-        mmd_degree, mmd_laplacian = evaluate_tl_mmd(DATA_DIR,
-                                                    train_grid,
-                                                    test_grid,
-                                                    batch_size)
+        mmd_degree, mmd_laplacian = \
+            evaluate_tl_mmd(data_dir=DATA_DIR,
+                            training_grid_codes=[train_grid],
+                            testing_grid_codes=[test_grid])
         
         # Since distance is symmetric, check both directions.
         results_df.loc[
@@ -300,6 +307,8 @@ if __name__ == '__main__':
             ['mmd_degree', 'mmd_laplacian']] = mmd_degree, mmd_laplacian
 
     # Save the rest of the results with mmd
-    if args.save_results:
+    if save_results and results_file:
         results_df.to_csv(results_file)
-        print(f'\nTransfer learning results w/ mmd) saved to: {results_file}')
+        print(f'Transfer learning results w/ mmd saved to: {results_file}')
+
+    print("\nTraining complete")

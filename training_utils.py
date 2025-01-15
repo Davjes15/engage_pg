@@ -33,7 +33,7 @@ def create_log_dir(model_classname):
     os.makedirs(log_dir, exist_ok=True)
     return log_dir
 
-def setup_logging(log_dir):
+def setup_file_output(log_dir):
     logfile = os.path.join(log_dir, 'log.txt')
     print(f'Logs will be saved in: {logfile}')
     sys.stdout = open(logfile, 'w')
@@ -56,48 +56,56 @@ def get_device():
     return device
 
 def get_dataset(data_dir,
-                grid_type,
+                grid_types,
                 include_sources=False,
                 cycles=False,
                 path_lengths=False):
-    pyg_dataset = get_pyg_graphs(data_dir, grid_type)
-    if include_sources:
-        pp_sources = get_pp_sources(data_dir, grid_type)
-        for data, src in zip(pyg_dataset, pp_sources):
-            data.src = src
-    if cycles or path_lengths:
-        pyg_dataset = add_augmented_features(pyg_dataset,
-                                             cycles=cycles,
-                                             path_lengths=path_lengths)
-    return pyg_dataset
+    complete_dataset = []
+    for grid in grid_types:
+        pyg_dataset = get_pyg_graphs(data_dir, grid)
+        if include_sources:
+            pp_sources = get_pp_sources(data_dir, grid)
+            for data, src in zip(pyg_dataset, pp_sources):
+                data.src = src
+        if cycles or path_lengths:
+            pyg_dataset = add_augmented_features(pyg_dataset,
+                                                cycles=cycles,
+                                                path_lengths=path_lengths)
+        complete_dataset.extend(pyg_dataset)
+
+    return complete_dataset
 
 def get_dataloaders(data_dir,
-                    training_grid='1-LV-rural1--0-no_sw',
-                    testing_grid='1-LV-rural1--0-no_sw',
+                    training_grids=['1-LV-rural1--0-no_sw'],
+                    testing_grids=['1-LV-rural1--0-no_sw'],
                     include_sources=False,
                     add_cycles=False,
                     add_path_lengths=False,
-                    batch_size=16):
+                    batch_size=16,
+                    shuffle=False):
     loader_train = loader_val = loader_test = None
-    if training_grid:
+    if training_grids:
         train_dataset = get_dataset(data_dir,
-                                    training_grid,
+                                    training_grids,
                                     include_sources=include_sources,
                                     cycles=add_cycles,
                                     path_lengths=add_path_lengths)
         train_split, val_split = random_split(train_dataset, TRAIN_VAL_SPLIT)
 
         loader_train = DataLoader(train_split,
-                                batch_size=batch_size)
+                                batch_size=batch_size,
+                                shuffle=shuffle)
         loader_val = DataLoader(val_split,
-                                batch_size=batch_size)
-    if testing_grid:
+                                batch_size=batch_size,
+                                shuffle=shuffle)
+    if testing_grids:
         loader_test = DataLoader(get_dataset(data_dir,
-                                            testing_grid,
+                                            testing_grids,
                                             include_sources=include_sources,
                                             cycles=add_cycles,
                                             path_lengths=add_path_lengths),
-                                batch_size=batch_size)
+                                batch_size=batch_size,
+                                shuffle=shuffle)
     return loader_train, loader_val, loader_test
 
 def train(model,
