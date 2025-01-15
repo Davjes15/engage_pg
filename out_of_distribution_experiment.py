@@ -75,7 +75,7 @@ if __name__ == '__main__':
     performance_results = []
     i = 1
     total = len(test_cases)*len(variations)
-    print('\nCalculating Performance Metrics\n')
+    print('\nCalculating Performance Metrics')
     for train_grids, target in test_cases:
         for add_cycles, add_path_lengths in variations:
             print(f'\nIteration {i}/{total}')

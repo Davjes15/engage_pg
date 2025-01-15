@@ -11,6 +11,7 @@ from tqdm import tqdm
 import time
 import os
 import sys
+import multiprocessing
 
 from graph_utils import get_networkx_graph, get_pyg_graphs, get_pp_sources, add_augmented_features
 
@@ -233,19 +234,35 @@ def test(model,
 
     return nrmse_test
 
-def test_dc_opf(device, loader_test):
-    comparisons = []
-    for data in tqdm(loader_test.dataset):
-        # Load the source network
-        net = pp.from_json(data.src)
-        # Run dc opf
-        pp.rundcpp(net)
-        # Put this in correct format to match the true data and get np array.
-        np_pred_y = net.res_bus[['p_mw', 'q_mvar', 'vm_pu', 'va_degree']].values
-        # Convert to tensor and replace nan (q_mwar) with 0.
-        pred_y = torch.nan_to_num(torch.Tensor(np_pred_y), nan=0.0)
-        comparisons.append(Data(pred_y=pred_y, y=data.y))
+def run_dc_opf(data):
+    src, y = data
+    # Load the source network
+    net = pp.from_json(src)
+    # Run dc opf
+    pp.rundcpp(net)
+    # Put this in correct format to match the true data and get np array.
+    np_pred_y = net.res_bus[['p_mw', 'q_mvar', 'vm_pu', 'va_degree']].values
+    # Convert to tensor and replace nan (q_mwar) with 0.
+    pred_y = torch.nan_to_num(torch.Tensor(np_pred_y), nan=0.0)
+    return Data(pred_y=pred_y, y=y)
 
+def test_dc_opf(device, loader_test):
+    dataset = [(data.src, data.y) for data in loader_test.dataset]
+    comparisons = []
+    def collect_result(data):
+        comparisons.append(data)
+
+    # Use multiprocessing Pool to speed up sequential dc power flow.
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        for data in tqdm(dataset):
+            pool.apply_async(run_dc_opf, args=(data,), callback=collect_result)
+
+        # Close the pool and wait for all processes to finish
+        pool.close()
+        pool.join()
+
+    assert len(loader_test.dataset) == len(comparisons), \
+        'Something is wrong with the multiprocessing'
     dc_loader = DataLoader(comparisons, batch_size=loader_test.batch_size)
     nrmse_test = 0
     for dc_batch in dc_loader:
