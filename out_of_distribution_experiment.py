@@ -124,7 +124,7 @@ if __name__ == '__main__':
     # Save all results intermediately before we do next step.
     results_file = None
     if log_dir:
-        results_file = os.path.join(log_dir, 'results.csv')
+        results_file = os.path.join(log_dir, 'results_ood.csv')
     if save_results and results_file:
         results_df.to_csv(results_file)
         print(f'\nSaving intermediate results to: {results_file}')
@@ -149,6 +149,6 @@ if __name__ == '__main__':
     # Save the rest of the results with mmd
     if save_results and results_file:
         results_df.to_csv(results_file)
-        print(f'Transfer learning results w/ mmd saved to: {results_file}')
+        print(f'Out of distribution results w/ mmd saved to: {results_file}')
 
     print("\nTraining complete")

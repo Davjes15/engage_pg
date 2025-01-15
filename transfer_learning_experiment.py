@@ -278,7 +278,7 @@ if __name__ == '__main__':
     # Save all results intermediately before we do next step.
     results_file = None
     if log_dir:
-        results_file = os.path.join(log_dir, 'results.csv')
+        results_file = os.path.join(log_dir, 'results_tl.csv')
     if save_results and results_file:
         results_df.to_csv(results_file)
         print(f'\nSaving intermediate results to: {results_file}')
