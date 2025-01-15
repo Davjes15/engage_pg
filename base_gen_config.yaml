@@ -28,13 +28,13 @@ sampling:
   active_load:
     method: "normal_independent_factor" # "uniform_independent_values"
     params:
-      std: 0.05
+      std: 0.1
       #beta: 0.1 # 1.0
 
   reactive_load:
     method: "uniform_power_factor"
     params:
-      pf_min: 0.8
+      pf_min: 0.7
       pf_max:  1.
       flip_prob: 0.1
   

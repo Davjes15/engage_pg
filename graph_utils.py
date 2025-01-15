@@ -7,7 +7,6 @@ import pandas as pd
 import numpy as np
 import torch
 from torch_geometric.utils import to_networkx
-from torch_geometric.data import Data
 import networkx as nx
 import simbench as sb
 

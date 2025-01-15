@@ -11,7 +11,8 @@ from training_utils import (
     create_log_dir,
     setup_logging,
     get_model_save_path,
-    setup_pytorch_and_get_device,
+    setup_pytorch,
+    get_device,
     get_dataloaders,
     plot_loss,
     train,
@@ -32,6 +33,11 @@ def parse_args():
         default='gcn',
     )
     parser.add_argument(
+        "--scenario",
+        type=int,
+        default=1,
+    )
+    parser.add_argument(
         "--batch_size",
         type=int,
         default=16,
@@ -46,9 +52,8 @@ def parse_args():
         action="store_true"
     )
     parser.add_argument(
-        "--scenario",
-        type=int,
-        default=0,
+        "--plot",
+        action="store_true"
     )
     args = parser.parse_args()
     return args
@@ -73,7 +78,8 @@ def evaluate_performance(data_dir,
                          add_path_lengths=False,
                          log_dir=None,
                          plot=False,
-                         save_model=False):
+                         save_model=False,
+                         experiment_id=0):
     # Log information about training run
     learning_rate=1e-3
     early_stopping=True
@@ -86,12 +92,13 @@ def evaluate_performance(data_dir,
         setup_logging(log_dir)
 
     model_weights_path = ''
-    if save_model:
-        assert log_dir, 'Need to pass a log_dir path in order to save model'
+    if save_model or plot:
+        assert log_dir, 'Need to pass a log_dir path in order to save model or plot loss'
         model_weights_path = get_model_save_path(log_dir)
 
     # PyTorch setup
-    device = setup_pytorch_and_get_device()
+    device = get_device()
+    print(f"Training using {device}", flush=True)
 
     # Get data loaders
     loader_train, loader_val, loader_test = get_dataloaders(
@@ -123,11 +130,13 @@ def evaluate_performance(data_dir,
     
     # Plot the model
     if plot:
-        plot_loss(model_class.__name__,
+        plot_loss(log_dir,
+                  model_class.__name__,
                   train_loss_vec,
                   val_loss_vec,
                   add_cycles,
-                  add_path_lengths)
+                  add_path_lengths,
+                  fig_id=experiment_id)
 
     # Test the model
     nrmse_test = test(model=model,
@@ -146,7 +155,8 @@ def evaluate_dc_opf(data_dir, testing_grid_code):
         add_cycles=False,
         add_path_lengths=False)
     
-    nrmse_test = test_dc_opf(loader_test)
+    device = get_device()
+    nrmse_test = test_dc_opf(device, loader_test)
     return nrmse_test
 
 def evaluate_tl_mmd(data_dir,
@@ -181,9 +191,14 @@ if __name__ == '__main__':
     model_classes = {'gcn': GCN, 'arma_gnn': ARMA_GNN}
     model_class = model_classes[args.model]
 
-    # Get training params
+    # Set up pytorch and training
+    setup_pytorch()
     batch_size = args.batch_size
     epochs = args.epochs
+    save_results = args.save_results
+    plot = args.plot
+    if save_results or plot:
+        log_dir = create_log_dir(model_class.__name__)
 
     # Grids to compare pairwise
     grids_to_compare = get_dist_grid_codes(scenario=args.scenario)
@@ -222,7 +237,8 @@ if __name__ == '__main__':
                               batch_size=batch_size,
                               epochs=epochs,
                               add_cycles=add_cycles,
-                              add_path_lengths=add_path_lengths)
+                              add_path_lengths=add_path_lengths,
+                              experiment_id=i-1)
             performance_results.append(
                 (
                     train_grid,
@@ -237,6 +253,7 @@ if __name__ == '__main__':
                 )
             )
             i += 1
+        print('Solving using dc opf')
         nrmse_dc_opf = evaluate_dc_opf(DATA_DIR, test_grid)
         performance_results.append(
             (
@@ -252,6 +269,12 @@ if __name__ == '__main__':
             )
         )
     results_df = pd.DataFrame(performance_results, columns=column_names)
+
+    # Save all results intermediately before we do next step.
+    results_file = os.path.join(log_dir, 'results.csv')
+    if save_results:
+        results_df.to_csv(results_file)
+        print(f'\nSaving intermediate results to: {results_file}')
 
     # Compare MMDs between train and test sets, and add to results df
     print('\nCalculating MMDs\n')
@@ -276,9 +299,7 @@ if __name__ == '__main__':
             ),
             ['mmd_degree', 'mmd_laplacian']] = mmd_degree, mmd_laplacian
 
-    # Save all results
+    # Save the rest of the results with mmd
     if args.save_results:
-        log_dir = create_log_dir(model_class.__name__)
-        results_file = os.path.join(log_dir, 'results.csv')
         results_df.to_csv(results_file)
-        print(f'\nTransfer learning results saved to: {results_file}')
+        print(f'\nTransfer learning results w/ mmd) saved to: {results_file}')

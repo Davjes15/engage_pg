@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import random_split
+from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 import pandapower as pp
@@ -40,9 +41,11 @@ def setup_logging(log_dir):
 def get_model_save_path(log_dir):
     return os.path.join(log_dir, 'model_weights')
 
-def setup_pytorch_and_get_device():
+def setup_pytorch():
     torch.manual_seed(12)
+    return
 
+def get_device():
     device = (
         "cuda"
         if torch.cuda.is_available()
@@ -50,8 +53,6 @@ def setup_pytorch_and_get_device():
         # if torch.backends.mps.is_available()
         else "cpu"
     )
-    device = 'cpu'
-    print(f"Training using {device}", flush=True)
     return device
 
 def get_dataset(data_dir,
@@ -186,7 +187,14 @@ def train(model,
 
     return train_loss_vec, val_loss_vec, best_val_loss, train_time, total_epochs
 
-def plot_loss(model_classname, train_loss_vec, val_loss_vec, cycle=False, path_lengths=False):
+def plot_loss(log_dir,
+              model_classname,
+              train_loss_vec,
+              val_loss_vec,
+              cycle=False,
+              path_lengths=False,
+              fig_id=0):
+    filename = os.path.join(log_dir, f'fig_{fig_id}.png')
     fig, ax = plt.subplots()
     ax.plot(train_loss_vec, label = 'train loss')
     ax.plot(val_loss_vec, label = 'val loss')
@@ -195,7 +203,7 @@ def plot_loss(model_classname, train_loss_vec, val_loss_vec, cycle=False, path_l
     ax.legend()
     title = f"{model_classname}, cycle: {cycle}, path_lengths: {path_lengths}"
     ax.set_title(title)
-    plt.show(block=True)
+    plt.savefig(filename)
 
 def nrmse_loss(y_pred, y_real):
     element_mse = torch.nn.MSELoss(reduction='none')(y_pred, y_real)
@@ -217,11 +225,9 @@ def test(model,
 
     return nrmse_test
 
-def test_dc_opf(loader_test):
-    # TODO: Add batching if too slow -> Can run pp, add them back to Data
-    # object, and do the loss calculations in batches.
-    nrmse_test = 0
-    for data in loader_test.dataset:
+def test_dc_opf(device, loader_test):
+    comparisons = []
+    for data in tqdm(loader_test.dataset):
         # Load the source network
         net = pp.from_json(data.src)
         # Run dc opf
@@ -230,8 +236,14 @@ def test_dc_opf(loader_test):
         np_pred_y = net.res_bus[['p_mw', 'q_mvar', 'vm_pu', 'va_degree']].values
         # Convert to tensor and replace nan (q_mwar) with 0.
         pred_y = torch.nan_to_num(torch.Tensor(np_pred_y), nan=0.0)
-        loss = nrmse_loss(pred_y, data.y)
-        nrmse_test += loss.item()
+        comparisons.append(Data(pred_y=pred_y, y=data.y))
+
+    dc_loader = DataLoader(comparisons, batch_size=loader_test.batch_size)
+    nrmse_test = 0
+    for dc_batch in dc_loader:
+        dc_batch.to(device)
+        loss = nrmse_loss(dc_batch.pred_y, dc_batch.y)
+        nrmse_test += loss.item()*dc_batch.num_graphs
     nrmse_test /= len(loader_test.dataset)
 
     return nrmse_test

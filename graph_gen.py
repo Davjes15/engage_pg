@@ -46,7 +46,7 @@ def parse_args():
     parser.add_argument(
         "--scenario",
         type=int,
-        default=0,
+        default=1,
     )
     args = parser.parse_args()
     return args
