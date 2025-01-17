@@ -1,6 +1,4 @@
 import os
-import argparse
-from itertools import permutations, combinations
 
 import pandas as pd
 import numpy as np
@@ -15,7 +13,7 @@ from graph_utils import get_dist_grid_codes
 from transfer_learning_experiment import (
     parse_args,
     evaluate_performance,
-    evaluate_dc_opf,
+    evaluate_dc_pf,
     evaluate_tl_mmd
 )
 
@@ -70,7 +68,7 @@ if __name__ == '__main__':
         'best_val_loss',
         'train_time',
         'total_epochs',
-        'dc_opf'
+        'dc_pf'
     ]
     performance_results = []
     i = 1
@@ -91,7 +89,7 @@ if __name__ == '__main__':
                               add_path_lengths=add_path_lengths,
                               log_dir=log_dir,
                               plot=plot,
-                              experiment_id=i-1)
+                              experiment_id=i)
             performance_results.append(
                 (
                     target,
@@ -101,22 +99,24 @@ if __name__ == '__main__':
                     best_val_loss,
                     train_time,
                     total_epochs,
-                    False # dc_opf
+                    False # dc_pf
                 )
             )
+            print(f'\tBest val loss: {best_val_loss}\n\tNRMSE: {nrmse_test}')
             i += 1
-        print('Solving using dc opf')
-        nrmse_dc_opf = evaluate_dc_opf(DATA_DIR, target)
+        print('\nEvaluating dc opf...')
+        nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, target)
+        print('...complete')
         performance_results.append(
             (
                 target,
                 False, # add_cycles
                 False, # add_path_lengths
-                nrmse_dc_opf,
+                nrmse_dc_pf,
                 np.nan, # best_val_loss
                 np.nan, # train_time
                 np.nan, # total_epochs
-                True # dc_opf
+                True # dc_pf
             )
         )
     results_df = pd.DataFrame(performance_results, columns=column_names)
@@ -127,28 +127,29 @@ if __name__ == '__main__':
         results_file = os.path.join(log_dir, 'results_ood.csv')
     if save_results and results_file:
         results_df.to_csv(results_file)
-        print(f'\nSaving intermediate results to: {results_file}')
+        print(f'\nSaved OOD results to: {results_file}')
 
-    # Compare MMDs between train and test sets, and add to results df
-    print('Calculating MMDs...')
-    test_cases = get_mmd_test_cases(grids_to_compare)
-    results_df['mmd_degree'] = np.nan
-    results_df['mmd_laplacian'] = np.nan
-    for train_grids, target in tqdm(test_cases):
-        mmd_degree, mmd_laplacian = \
-            evaluate_tl_mmd(data_dir=DATA_DIR,
-                            training_grid_codes=train_grids,
-                            testing_grid_codes=[target])
-        
-        # Since distance is symmetric, check both directions.
-        results_df.loc[
-                results_df['testing_grid'] == target,
-                ['mmd_degree', 'mmd_laplacian']
-            ] = mmd_degree, mmd_laplacian
+    if args.compute_mmd:
+        # Compare MMDs between train and test sets, and add to results df
+        print('Calculating MMDs...')
+        test_cases = get_mmd_test_cases(grids_to_compare)
+        results_df['mmd_degree'] = np.nan
+        results_df['mmd_laplacian'] = np.nan
+        for train_grids, target in tqdm(test_cases):
+            mmd_degree, mmd_laplacian = \
+                evaluate_tl_mmd(data_dir=DATA_DIR,
+                                training_grid_codes=train_grids,
+                                testing_grid_codes=[target])
 
-    # Save the rest of the results with mmd
-    if save_results and results_file:
-        results_df.to_csv(results_file)
-        print(f'Out of distribution results w/ mmd saved to: {results_file}')
+            # Find the right row and put in the mmd info.
+            results_df.loc[
+                    results_df['testing_grid'] == target,
+                    ['mmd_degree', 'mmd_laplacian']
+                ] = mmd_degree, mmd_laplacian
+
+        # Save the rest of the results with mmd
+        if save_results and results_file:
+            results_df.to_csv(results_file)
+            print(f'Saved OOD results w/ mmd to: {results_file}')
 
     print("\nTraining complete")

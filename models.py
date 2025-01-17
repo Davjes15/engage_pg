@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch_geometric.nn import GCNConv, ARMAConv
+from torch.masked import masked_tensor
 
 # =============================================================================
 #                       Experiment models
@@ -66,6 +67,7 @@ class GCN(nn.Module):
         self.num_gcn_layers = 8
         self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
         self.leakyReLU_small = nn.LeakyReLU(negative_slope=0.005)
+        self.feature_mask = torch.tensor([False]*3 + [True]*(input_dim-3))
 
         # Pre-processing layers
         self.predense1_node = nn.Linear(self.input_dim, 64)
@@ -78,17 +80,20 @@ class GCN(nn.Module):
         ])
 
         # Post-processing layer
-        self.postdense1 = nn.Linear(64, 64)
+        self.postdense1 = nn.Linear(64+self.input_dim, 64)
         self.postdense2 = nn.Linear(64, 64)
 
         # Output layer
         self.readout = nn.Linear(64, 4)
 
     def forward(self, data):
+        mask = self.feature_mask.repeat(len(data.x), 1)
+
         x = torch.nan_to_num(data.x, nan=0.0) # dim=(N, self.input_dim)
         edge_index = data.edge_index # dim=(2, 2E)
         edge_attr = torch.nan_to_num(data.edge_attr, nan=0.0) # dim=(2E, 4)
         
+        node_emb = masked_tensor(x, mask)
         node_emb = self.leakyReLU(self.predense1_node(x))
         node_emb = self.leakyReLU(self.predense2_node(node_emb))
 
@@ -104,6 +109,7 @@ class GCN(nn.Module):
                                             edge_index=edge_index,
                                             edge_weight=edge_emb))
 
+        node_emb = torch.cat([x, node_emb], 1)
         node_emb = self.leakyReLU(self.postdense1(node_emb))
         node_emb = self.leakyReLU(self.postdense2(node_emb))
 

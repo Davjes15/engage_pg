@@ -11,7 +11,6 @@ from tqdm import tqdm
 import time
 import os
 import sys
-import multiprocessing
 
 from graph_utils import get_networkx_graph, get_pyg_graphs, get_pp_sources, add_augmented_features
 
@@ -48,7 +47,7 @@ def setup_pytorch():
 
 def get_device():
     device = (
-        "cuda"
+        "cuda:0"
         if torch.cuda.is_available()
         # else "mps"
         # if torch.backends.mps.is_available()
@@ -56,30 +55,40 @@ def get_device():
     )
     return device
 
+DATASET_CACHE = {}
+
 def get_dataset(data_dir,
                 grid_types,
-                include_sources=False,
+                init_dc=False,
                 cycles=False,
                 path_lengths=False):
     complete_dataset = []
     for grid in grid_types:
-        pyg_dataset = get_pyg_graphs(data_dir, grid)
-        if include_sources:
-            pp_sources = get_pp_sources(data_dir, grid)
-            for data, src in zip(pyg_dataset, pp_sources):
-                data.src = src
-        if cycles or path_lengths:
-            pyg_dataset = add_augmented_features(pyg_dataset,
-                                                cycles=cycles,
-                                                path_lengths=path_lengths)
+        pyg_dataset = None
+        id = ':'.join([str(v) for v in [grid, cycles, path_lengths]])
+        if id in DATASET_CACHE:
+            print('Cache hit:', id)
+            pyg_dataset = DATASET_CACHE[id]
+        else:
+            print('Cache miss:', id)
+            pyg_dataset = get_pyg_graphs(data_dir, grid)
+            if cycles or path_lengths:
+                pyg_dataset = add_augmented_features(pyg_dataset,
+                                                    cycles=cycles,
+                                                    path_lengths=path_lengths)
+            DATASET_CACHE[id] = pyg_dataset
         complete_dataset.extend(pyg_dataset)
+
+    if init_dc:
+        for data in complete_dataset:
+            data.x[:, 3:7] = data.dc_pf
 
     return complete_dataset
 
 def get_dataloaders(data_dir,
                     training_grids=['1-LV-rural1--0-no_sw'],
                     testing_grids=['1-LV-rural1--0-no_sw'],
-                    include_sources=False,
+                    init_dc=False,
                     add_cycles=False,
                     add_path_lengths=False,
                     batch_size=16,
@@ -88,7 +97,7 @@ def get_dataloaders(data_dir,
     if training_grids:
         train_dataset = get_dataset(data_dir,
                                     training_grids,
-                                    include_sources=include_sources,
+                                    init_dc=init_dc,
                                     cycles=add_cycles,
                                     path_lengths=add_path_lengths)
         train_split, val_split = random_split(train_dataset, TRAIN_VAL_SPLIT)
@@ -102,12 +111,27 @@ def get_dataloaders(data_dir,
     if testing_grids:
         loader_test = DataLoader(get_dataset(data_dir,
                                             testing_grids,
-                                            include_sources=include_sources,
+                                            init_dc=init_dc,
                                             cycles=add_cycles,
                                             path_lengths=add_path_lengths),
                                 batch_size=batch_size,
                                 shuffle=shuffle)
     return loader_train, loader_val, loader_test
+
+def weighted_mse_loss(pred, target, eps=1e-8):
+    # To give equal importance to smaller and larger vectors, we weight the loss
+    # by the inverse of the true vector’s norm.
+
+    # Compute the L2 norm of the true vectors
+    target_norm = torch.norm(target, dim=-1, keepdim=True) + eps  # Shape: (N, 1)
+    # Weight for each vector is the inverse of its norm
+    weights = 1.0 / target_norm  # Shape: (N, 1)
+    # Compute the element-wise MSE
+    mse = nn.functional.mse_loss(pred, target, reduction='none')  # Shape: (N, D)
+    # Apply weights and compute the mean
+    weighted_mse = weights * mse  # Broadcasting over (N, D)
+    # Return the mean loss across all elements
+    return weighted_mse.mean()
 
 def train(model,
           device,
@@ -123,7 +147,8 @@ def train(model,
 
     # Configure hyperparameters
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    loss_fn = nn.MSELoss(reduction='mean') # Average over all elements
+    # loss_fn = nn.MSELoss(reduction='mean') # Average over all elements
+    loss_fn = weighted_mse_loss
 
     # Variables to track best model
     best_val_loss = np.Inf
@@ -213,6 +238,7 @@ def plot_loss(log_dir,
     title = f"{model_classname}, cycle: {cycle}, path_lengths: {path_lengths}"
     ax.set_title(title)
     plt.savefig(filename)
+    print(f'Figure saved to: {filename}')
 
 def nrmse_loss(y_pred, y_real):
     element_mse = torch.nn.MSELoss(reduction='none')(y_pred, y_real)
@@ -234,40 +260,11 @@ def test(model,
 
     return nrmse_test
 
-def run_dc_opf(data):
-    src, y = data
-    # Load the source network
-    net = pp.from_json(src)
-    # Run dc opf
-    pp.rundcpp(net)
-    # Put this in correct format to match the true data and get np array.
-    np_pred_y = net.res_bus[['p_mw', 'q_mvar', 'vm_pu', 'va_degree']].values
-    # Convert to tensor and replace nan (q_mwar) with 0.
-    pred_y = torch.nan_to_num(torch.Tensor(np_pred_y), nan=0.0)
-    return Data(pred_y=pred_y, y=y)
-
-def test_dc_opf(device, loader_test):
-    dataset = [(data.src, data.y) for data in loader_test.dataset]
-    comparisons = []
-    def collect_result(data):
-        comparisons.append(data)
-
-    # Use multiprocessing Pool to speed up sequential dc power flow.
-    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        for data in tqdm(dataset):
-            pool.apply_async(run_dc_opf, args=(data,), callback=collect_result)
-
-        # Close the pool and wait for all processes to finish
-        pool.close()
-        pool.join()
-
-    assert len(loader_test.dataset) == len(comparisons), \
-        'Something is wrong with the multiprocessing'
-    dc_loader = DataLoader(comparisons, batch_size=loader_test.batch_size)
+def test_dc_pf(device, loader_test):
     nrmse_test = 0
-    for dc_batch in dc_loader:
+    for dc_batch in loader_test:
         dc_batch.to(device)
-        loss = nrmse_loss(dc_batch.pred_y, dc_batch.y)
+        loss = nrmse_loss(dc_batch.dc_pf, dc_batch.y)
         nrmse_test += loss.item()*dc_batch.num_graphs
     nrmse_test /= len(loader_test.dataset)
 

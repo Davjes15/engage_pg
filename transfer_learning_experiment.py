@@ -17,7 +17,7 @@ from training_utils import (
     plot_loss,
     train,
     test,
-    test_dc_opf,
+    test_dc_pf,
     evaluate_mmd
 )
 from graph_utils import get_dist_grid_codes
@@ -53,6 +53,10 @@ def parse_args():
     )
     parser.add_argument(
         "--plot",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--compute_mmd",
         action="store_true"
     )
     args = parser.parse_args()
@@ -96,6 +100,7 @@ def evaluate_performance(data_dir,
     model_weights_path = ''
     if save_model or plot:
         assert log_dir, 'Need to pass a log_dir path in order to save model or plot loss'
+    if save_model:
         model_weights_path = get_model_save_path(log_dir)
 
     # PyTorch setup
@@ -107,7 +112,7 @@ def evaluate_performance(data_dir,
         data_dir=data_dir,
         training_grids=training_grid_codes,
         testing_grids=testing_grid_codes,
-        include_sources=False,
+        init_dc=True,
         add_cycles=add_cycles,
         add_path_lengths=add_path_lengths,
         batch_size=batch_size,
@@ -148,18 +153,17 @@ def evaluate_performance(data_dir,
     
     return nrmse_test, best_val_loss, train_time, total_epochs
 
-def evaluate_dc_opf(data_dir, testing_grid_code):
+def evaluate_dc_pf(data_dir, testing_grid_code):
     # Get data loaders
     _, _, loader_test = get_dataloaders(
         data_dir=data_dir,
         training_grids=None,
         testing_grids=[testing_grid_code],
-        include_sources=True,
         add_cycles=False,
         add_path_lengths=False)
     
     device = get_device()
-    nrmse_test = test_dc_opf(device, loader_test)
+    nrmse_test = test_dc_pf(device, loader_test)
     return nrmse_test
 
 def evaluate_tl_mmd(data_dir,
@@ -170,7 +174,6 @@ def evaluate_tl_mmd(data_dir,
         data_dir=data_dir,
         training_grids=training_grid_codes,
         testing_grids=testing_grid_codes,
-        include_sources=False,
         add_cycles=False,
         add_path_lengths=False)
     
@@ -222,7 +225,7 @@ if __name__ == '__main__':
         'best_val_loss',
         'train_time',
         'total_epochs',
-        'dc_opf'
+        'dc_pf'
     ]
     performance_results = []
     i = 1
@@ -243,7 +246,7 @@ if __name__ == '__main__':
                               add_path_lengths=add_path_lengths,
                               log_dir=log_dir,
                               plot=plot,
-                              experiment_id=i-1)
+                              experiment_id=i)
             performance_results.append(
                 (
                     train_grid,
@@ -254,23 +257,25 @@ if __name__ == '__main__':
                     best_val_loss,
                     train_time,
                     total_epochs,
-                    False # dc_opf
+                    False # dc_pf
                 )
             )
+            print(f'\tBest val loss: {best_val_loss}\n\tNRMSE: {nrmse_test}')
             i += 1
-        print('Solving using dc opf')
-        nrmse_dc_opf = evaluate_dc_opf(DATA_DIR, test_grid)
+        print('\nEvaluating dc opf...')
+        nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, test_grid)
+        print('...complete')
         performance_results.append(
             (
                 'N/A', # train_grid
                 test_grid,
                 False, # add_cycles
                 False, # add_path_lengths
-                nrmse_dc_opf,
+                nrmse_dc_pf,
                 np.nan, # best_val_loss
                 np.nan, # train_time
                 np.nan, # total_epochs
-                True # dc_opf
+                True # dc_pf
             )
         )
     results_df = pd.DataFrame(performance_results, columns=column_names)
@@ -281,34 +286,35 @@ if __name__ == '__main__':
         results_file = os.path.join(log_dir, 'results_tl.csv')
     if save_results and results_file:
         results_df.to_csv(results_file)
-        print(f'\nSaving intermediate results to: {results_file}')
+        print(f'\nSaved TL results to: {results_file}')
 
-    # Compare MMDs between train and test sets, and add to results df
-    print('Calculating MMDs...')
-    test_cases = get_mmd_test_cases(grids_to_compare)
-    results_df['mmd_degree'] = np.nan
-    results_df['mmd_laplacian'] = np.nan
-    for train_grid, test_grid in tqdm(test_cases):
-        mmd_degree, mmd_laplacian = \
-            evaluate_tl_mmd(data_dir=DATA_DIR,
-                            training_grid_codes=[train_grid],
-                            testing_grid_codes=[test_grid])
-        
-        # Since distance is symmetric, check both directions.
-        results_df.loc[
-            (
-                (results_df['training_grid'] == train_grid) &
-                (results_df['testing_grid'] == test_grid)
-            ) |
-            (
-                (results_df['training_grid'] == test_grid) &
-                (results_df['testing_grid'] == train_grid)
-            ),
-            ['mmd_degree', 'mmd_laplacian']] = mmd_degree, mmd_laplacian
+    if args.compute_mmd:
+        # Compare MMDs between train and test sets, and add to results df
+        print('Calculating MMDs...')
+        test_cases = get_mmd_test_cases(grids_to_compare)
+        results_df['mmd_degree'] = np.nan
+        results_df['mmd_laplacian'] = np.nan
+        for train_grid, test_grid in tqdm(test_cases):
+            mmd_degree, mmd_laplacian = \
+                evaluate_tl_mmd(data_dir=DATA_DIR,
+                                training_grid_codes=[train_grid],
+                                testing_grid_codes=[test_grid])
 
-    # Save the rest of the results with mmd
-    if save_results and results_file:
-        results_df.to_csv(results_file)
-        print(f'Transfer learning results w/ mmd saved to: {results_file}')
+            # Since distance is symmetric, check both directions.
+            results_df.loc[
+                (
+                    (results_df['training_grid'] == train_grid) &
+                    (results_df['testing_grid'] == test_grid)
+                ) |
+                (
+                    (results_df['training_grid'] == test_grid) &
+                    (results_df['testing_grid'] == train_grid)
+                ),
+                ['mmd_degree', 'mmd_laplacian']] = mmd_degree, mmd_laplacian
+
+        # Save the rest of the results with mmd
+        if save_results and results_file:
+            results_df.to_csv(results_file)
+            print(f'Saved TL results w/ mmd to: {results_file}')
 
     print("\nTraining complete")

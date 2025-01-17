@@ -27,6 +27,7 @@ from torch_geometric.data import Data
 import time
 import logging
 import argparse
+from copy import deepcopy
 
 from graph_utils import get_dist_grid_codes
 
@@ -285,17 +286,31 @@ if __name__ == '__main__':
             X_i, Y_i = get_node_features(net)
             A_i, E_i = get_edge_features(net)
 
+            # Run dc_pf, such that we can use this later and do not have to compute every time.
+
+            # Load the source network
+            net = deepcopy(net)
+            # Run dc pf
+            pp.rundcpp(net)
+            # Put this in correct format to match the true data and get np array.
+            np_dc_pf = net.res_bus[['p_mw', 'q_mvar', 'vm_pu', 'va_degree']].values
+            # Convert to tensor and replace nan (q_mwar) with 0.
+            dc_pf = torch.nan_to_num(torch.Tensor(np_dc_pf), nan=0.0)
+
             # Data dimensions
             #   x: (N, 7), where 7 are [Slack?, PV?, PQ?, p_mw, q_mvar, vm_pu, va_degree]
             #   edge_index: (2, 2E)
             #   edge_attr: (2E, 5), where 5 are [trafo?, r_pu, x_pu, length, phase_shift]
             #   y: (N, 4), where 4 are [p_mw, q_mvar, vm_pu, va_degree]
+            #   dc_pf: (N, 4), where 4 are [p_mw, q_mvar, vm_pu, va_degree]
             #
+
             dataset.append(
                 Data(x=torch.tensor(X_i, dtype=torch.float32),
                     edge_index=torch.tensor(A_i, dtype=torch.int64),
-                    edge_attr=torch.tensor(E_i, dtype=torch.float32), #
-                    y=torch.tensor(Y_i, dtype=torch.float32))
+                    edge_attr=torch.tensor(E_i, dtype=torch.float32),
+                    y=torch.tensor(Y_i, dtype=torch.float32),
+                    dc_pf=dc_pf)
             )
             srcs.append(f)
         

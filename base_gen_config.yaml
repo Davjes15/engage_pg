@@ -17,7 +17,6 @@ sampling:
           2: 0.2
           3: 0.2
           4: 0.2
-        black_list: [25, 30, 32, 34, 36]
 
   total_load:
     method: "uniform_factor"
