@@ -45,6 +45,7 @@ if __name__ == '__main__':
     epochs = args.epochs
     save_results = args.save_results
     plot = args.plot
+    save_model = args.save_model
     log_dir = None
     if save_results or plot:
         log_dir = create_log_dir(model_class.__name__)
@@ -89,6 +90,7 @@ if __name__ == '__main__':
                               add_path_lengths=add_path_lengths,
                               log_dir=log_dir,
                               plot=plot,
+                              save_model=save_model,
                               experiment_id=i)
             performance_results.append(
                 (
@@ -104,21 +106,22 @@ if __name__ == '__main__':
             )
             print(f'\tBest val loss: {best_val_loss}\n\tNRMSE: {nrmse_test}')
             i += 1
-        print('\nEvaluating dc opf...')
-        nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, target)
-        print('...complete')
-        performance_results.append(
-            (
-                target,
-                False, # add_cycles
-                False, # add_path_lengths
-                nrmse_dc_pf,
-                np.nan, # best_val_loss
-                np.nan, # train_time
-                np.nan, # total_epochs
-                True # dc_pf
+        if args.with_dc_pf:
+            print('\nEvaluating dc opf...')
+            nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, target)
+            print('...complete')
+            performance_results.append(
+                (
+                    target,
+                    False, # add_cycles
+                    False, # add_path_lengths
+                    nrmse_dc_pf,
+                    np.nan, # best_val_loss
+                    np.nan, # train_time
+                    np.nan, # total_epochs
+                    True # dc_pf
+                )
             )
-        )
     results_df = pd.DataFrame(performance_results, columns=column_names)
 
     # Save all results intermediately before we do next step.
@@ -129,7 +132,7 @@ if __name__ == '__main__':
         results_df.to_csv(results_file)
         print(f'\nSaved OOD results to: {results_file}')
 
-    if args.compute_mmd:
+    if args.with_mmd:
         # Compare MMDs between train and test sets, and add to results df
         print('Calculating MMDs...')
         test_cases = get_mmd_test_cases(grids_to_compare)

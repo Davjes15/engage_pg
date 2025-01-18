@@ -12,7 +12,7 @@ import time
 import os
 import sys
 
-from graph_utils import get_networkx_graph, get_pyg_graphs, get_pp_sources, add_augmented_features
+from graph_utils import get_networkx_graph, get_pyg_graphs, add_augmented_features
 
 # Load graph eval library
 GRAPH_EVAL_PATH = os.path.abspath('ggme/src/')
@@ -38,8 +38,8 @@ def setup_file_output(log_dir):
     print(f'Logs will be saved in: {logfile}')
     sys.stdout = open(logfile, 'w')
 
-def get_model_save_path(log_dir):
-    return os.path.join(log_dir, 'model_weights')
+def get_model_save_path(log_dir, model_id=0):
+    return os.path.join(log_dir, f'model_weights_{model_id}')
 
 def setup_pytorch():
     torch.manual_seed(12)
@@ -75,7 +75,8 @@ def get_dataset(data_dir,
             if cycles or path_lengths:
                 pyg_dataset = add_augmented_features(pyg_dataset,
                                                     cycles=cycles,
-                                                    path_lengths=path_lengths)
+                                                    path_lengths=path_lengths,
+                                                    degree=True)
             DATASET_CACHE[id] = pyg_dataset
         complete_dataset.extend(pyg_dataset)
 

@@ -56,7 +56,15 @@ def parse_args():
         action="store_true"
     )
     parser.add_argument(
-        "--compute_mmd",
+        "--save_model",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--with_mmd",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--with_dc_pf",
         action="store_true"
     )
     args = parser.parse_args()
@@ -101,7 +109,7 @@ def evaluate_performance(data_dir,
     if save_model or plot:
         assert log_dir, 'Need to pass a log_dir path in order to save model or plot loss'
     if save_model:
-        model_weights_path = get_model_save_path(log_dir)
+        model_weights_path = get_model_save_path(log_dir, experiment_id)
 
     # PyTorch setup
     device = get_device()
@@ -201,6 +209,7 @@ if __name__ == '__main__':
     epochs = args.epochs
     save_results = args.save_results
     plot = args.plot
+    save_model = args.save_model
     log_dir = None
     if save_results or plot:
         log_dir = create_log_dir(model_class.__name__)
@@ -221,6 +230,7 @@ if __name__ == '__main__':
         'testing_grid',
         'cycles',
         'path_lengths',
+        'degree',
         'nrmse_test',
         'best_val_loss',
         'train_time',
@@ -246,6 +256,7 @@ if __name__ == '__main__':
                               add_path_lengths=add_path_lengths,
                               log_dir=log_dir,
                               plot=plot,
+                              save_model=save_model,
                               experiment_id=i)
             performance_results.append(
                 (
@@ -253,6 +264,7 @@ if __name__ == '__main__':
                     test_grid,
                     add_cycles,
                     add_path_lengths,
+                    True, # degree
                     nrmse_test,
                     best_val_loss,
                     train_time,
@@ -262,22 +274,23 @@ if __name__ == '__main__':
             )
             print(f'\tBest val loss: {best_val_loss}\n\tNRMSE: {nrmse_test}')
             i += 1
-        print('\nEvaluating dc opf...')
-        nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, test_grid)
-        print('...complete')
-        performance_results.append(
-            (
-                'N/A', # train_grid
-                test_grid,
-                False, # add_cycles
-                False, # add_path_lengths
-                nrmse_dc_pf,
-                np.nan, # best_val_loss
-                np.nan, # train_time
-                np.nan, # total_epochs
-                True # dc_pf
+        if args.with_dc_pf:
+            print('\nEvaluating dc opf...')
+            nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, test_grid)
+            print('...complete')
+            performance_results.append(
+                (
+                    'N/A', # train_grid
+                    test_grid,
+                    False, # add_cycles
+                    False, # add_path_lengths
+                    nrmse_dc_pf,
+                    np.nan, # best_val_loss
+                    np.nan, # train_time
+                    np.nan, # total_epochs
+                    True # dc_pf
+                )
             )
-        )
     results_df = pd.DataFrame(performance_results, columns=column_names)
 
     # Save all results intermediately before we do next step.
@@ -288,7 +301,7 @@ if __name__ == '__main__':
         results_df.to_csv(results_file)
         print(f'\nSaved TL results to: {results_file}')
 
-    if args.compute_mmd:
+    if args.with_mmd:
         # Compare MMDs between train and test sets, and add to results df
         print('Calculating MMDs...')
         test_cases = get_mmd_test_cases(grids_to_compare)

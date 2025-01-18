@@ -32,9 +32,12 @@ def get_pp_sources(ouput_base_dir, grid_type, split='train'):
     sources = pd.read_csv(dataset_source_path, index_col=0)['src'].to_list()
     return sources
 
+def get_degree(nx_graph):
+    return [nx_graph.degree[i] for i in range(nx_graph.number_of_nodes())]
+
 def get_cycle_lengths(nx_graph):
     cycles = nx.cycle_basis(nx_graph)
-    cycle_lengths = [0]*len(nx_graph.nodes)
+    cycle_lengths = [0]*nx_graph.number_of_nodes()
     for cycle in cycles:
         curr_length = len(cycle)
         for node in cycle:
@@ -51,7 +54,7 @@ def get_path_lengths_to_slack(nx_graph, slack_bus):
 def get_curvature_filtrations(nx_graph):
     pass
 
-def add_augmented_features(dataset, cycles=False, path_lengths=False, curvature_filtrations=False):
+def add_augmented_features(dataset, cycles=False, path_lengths=False, degree=False, curvature_filtrations=False):
     for data in dataset:
         nx_graph = get_networkx_graph(data)
         augmented_features = []
@@ -68,6 +71,9 @@ def add_augmented_features(dataset, cycles=False, path_lengths=False, curvature_
             assert slack_bus != -1
             augmented_features.append(
                 get_path_lengths_to_slack(nx_graph, slack_bus))
+
+        if degree:
+            augmented_features.append(get_degree(nx_graph))
         
         if curvature_filtrations:
             augmented_features.append(get_curvature_filtrations(nx_graph))
