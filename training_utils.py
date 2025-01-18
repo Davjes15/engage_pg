@@ -61,22 +61,22 @@ def get_dataset(data_dir,
                 grid_types,
                 init_dc=False,
                 cycles=False,
-                path_lengths=False):
+                path_lengths=False,
+                degree=False):
     complete_dataset = []
     for grid in grid_types:
         pyg_dataset = None
         id = ':'.join([str(v) for v in [grid, cycles, path_lengths]])
         if id in DATASET_CACHE:
-            print('Cache hit:', id)
             pyg_dataset = DATASET_CACHE[id]
         else:
-            print('Cache miss:', id)
+            print('Cache miss:', id, '... fetching')
             pyg_dataset = get_pyg_graphs(data_dir, grid)
             if cycles or path_lengths:
                 pyg_dataset = add_augmented_features(pyg_dataset,
                                                     cycles=cycles,
                                                     path_lengths=path_lengths,
-                                                    degree=True)
+                                                    degree=degree)
             DATASET_CACHE[id] = pyg_dataset
         complete_dataset.extend(pyg_dataset)
 
@@ -92,6 +92,7 @@ def get_dataloaders(data_dir,
                     init_dc=False,
                     add_cycles=False,
                     add_path_lengths=False,
+                    add_degree=False,
                     batch_size=16,
                     shuffle=False):
     loader_train = loader_val = loader_test = None
@@ -100,7 +101,8 @@ def get_dataloaders(data_dir,
                                     training_grids,
                                     init_dc=init_dc,
                                     cycles=add_cycles,
-                                    path_lengths=add_path_lengths)
+                                    path_lengths=add_path_lengths,
+                                    add_degree=add_degree)
         train_split, val_split = random_split(train_dataset, TRAIN_VAL_SPLIT)
 
         loader_train = DataLoader(train_split,
@@ -114,7 +116,8 @@ def get_dataloaders(data_dir,
                                             testing_grids,
                                             init_dc=init_dc,
                                             cycles=add_cycles,
-                                            path_lengths=add_path_lengths),
+                                            path_lengths=add_path_lengths,
+                                            add_degree=add_degree),
                                 batch_size=batch_size,
                                 shuffle=shuffle)
     return loader_train, loader_val, loader_test
@@ -243,8 +246,8 @@ def plot_loss(log_dir,
 
 def nrmse_loss(y_pred, y_real):
     element_mse = torch.nn.MSELoss(reduction='none')(y_pred, y_real)
-    sqrt_n_mean = torch.sqrt(torch.mean(element_mse, dim=0)) # sqrt(Mean of N samples)
-    nrmse = torch.mean(sqrt_n_mean) # Normalized across features
+    sqrt_n_mean = torch.sqrt(torch.mean(element_mse, dim=0) / torch.var(y_real, dim=0)) # sqrt(Mean of normalized N samples)
+    nrmse = torch.mean(sqrt_n_mean) # take mean across features
     return nrmse
 
 def test(model,

@@ -86,6 +86,23 @@ class GCN(nn.Module):
         # Output layer
         self.readout = nn.Linear(64, 4)
 
+    def inference(self, x, pred):
+        with torch.no_grad():
+            for node_x, node_pred in zip(x,pred):
+                # x: [Slack?, PV?, PQ?, p_mw, q_mvar, vm_pu, va_degree]
+                # pred: [p_mw, q_mvar, vm_pu, va_degree]
+                if node_x[0]:
+                    node_pred[2] = node_x[5] # vm_pu
+                    node_pred[3] = node_x[6] # va_degree
+                elif node_x[1]:
+                    node_pred[0] = node_x[3] # p_mw
+                    node_pred[2] = node_x[5] # vm_pu
+                else:
+                    node_pred[0] = node_x[3] # p_mw
+                    node_pred[1] = node_x[4] # q_mvar
+
+            return pred
+
     def forward(self, data):
         mask = self.feature_mask.repeat(len(data.x), 1)
 
@@ -113,4 +130,9 @@ class GCN(nn.Module):
         node_emb = self.leakyReLU(self.postdense1(node_emb))
         node_emb = self.leakyReLU(self.postdense2(node_emb))
 
-        return self.readout(node_emb)
+        pred = self.readout(node_emb)
+
+        if not self.training:
+            pred = self.inference(x, pred)
+
+        return pred

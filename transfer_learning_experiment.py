@@ -5,6 +5,7 @@ from itertools import permutations, combinations
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import torch
 
 from models import GCN, ARMA_GNN
 from training_utils import (
@@ -60,11 +61,23 @@ def parse_args():
         action="store_true"
     )
     parser.add_argument(
-        "--with_mmd",
+        "--eval_only",
         action="store_true"
     )
     parser.add_argument(
-        "--with_dc_pf",
+        "--load_model_dir",
+        required=False,
+    )
+    parser.add_argument(
+        "--skip_experiment",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--mmd",
+        action="store_true"
+    )
+    parser.add_argument(
+        "--dc_pf",
         action="store_true"
     )
     args = parser.parse_args()
@@ -89,9 +102,12 @@ def evaluate_performance(data_dir,
                          shuffle=False,
                          add_cycles=False,
                          add_path_lengths=False,
+                         add_degree=False,
                          log_dir=None,
                          plot=False,
                          save_model=False,
+                         eval_only=False,
+                         load_model_dir=None,
                          set_file_output=False,
                          experiment_id=0):
     # Log information about training run
@@ -123,6 +139,7 @@ def evaluate_performance(data_dir,
         init_dc=True,
         add_cycles=add_cycles,
         add_path_lengths=add_path_lengths,
+        add_degree=add_degree,
         batch_size=batch_size,
         shuffle=shuffle)
 
@@ -130,29 +147,39 @@ def evaluate_performance(data_dir,
     input_dim = next(iter(loader_train)).x.shape[1]
     model = model_class(input_dim=input_dim).to(device)
 
-    # Train the model
-    train_loss_vec, val_loss_vec, best_val_loss, train_time, total_epochs = \
-        train(model=model,
-              device=device,
-              loader_train=loader_train,
-              loader_val=loader_val,
-              epochs=epochs,
-              learning_rate=learning_rate,
-              early_stopping=early_stopping,
-              patience=patience,
-              best_val_weights=best_val_weights,
-              save_model_to=model_weights_path,
-              log_epochs=(log_dir == True))
+    if load_model_dir:
+        load_model_path = get_model_save_path(load_model_dir,
+                                              model_id=experiment_id)
+        model.load_state_dict(torch.load(load_model_path,
+                                         weights_only=True,
+                                         map_location=device))
+
+    best_val_loss, train_time, total_epochs = 0.0, 0.0, 0
+
+    if not eval_only:
+        # Train the model
+        train_loss_vec, val_loss_vec, best_val_loss, train_time, total_epochs = \
+            train(model=model,
+                device=device,
+                loader_train=loader_train,
+                loader_val=loader_val,
+                epochs=epochs,
+                learning_rate=learning_rate,
+                early_stopping=early_stopping,
+                patience=patience,
+                best_val_weights=best_val_weights,
+                save_model_to=model_weights_path,
+                log_epochs=(log_dir == True))
     
-    # Plot the model
-    if plot:
-        plot_loss(log_dir,
-                  model_class.__name__,
-                  train_loss_vec,
-                  val_loss_vec,
-                  add_cycles,
-                  add_path_lengths,
-                  fig_id=experiment_id)
+        # Plot the model
+        if plot:
+            plot_loss(log_dir,
+                    model_class.__name__,
+                    train_loss_vec,
+                    val_loss_vec,
+                    add_cycles,
+                    add_path_lengths,
+                    fig_id=experiment_id)
 
     # Test the model
     nrmse_test = test(model=model,
@@ -210,124 +237,128 @@ if __name__ == '__main__':
     save_results = args.save_results
     plot = args.plot
     save_model = args.save_model
+    eval_only = args.eval_only
+    load_model_dir = args.load_model_dir
     log_dir = None
     if save_results or plot:
         log_dir = create_log_dir(model_class.__name__)
 
-    # Grids to compare pairwise
     grids_to_compare = get_dist_grid_codes(scenario=args.scenario)
-    test_cases = get_performance_test_cases(grids_to_compare)
-    
-    # Variations of each pairwise comparison (add_cycles, add_path_lengths)
-    variations = [(False, False),
-                  (True, True),
-                  (True, False),
-                  (False, True)]
+    if not args.skip_experiment:
+        # Grids to compare pairwise
+        test_cases = get_performance_test_cases(grids_to_compare)
 
-    # Run the training and test for every combination, and save results in df
-    column_names = [
-        'training_grid',
-        'testing_grid',
-        'cycles',
-        'path_lengths',
-        'degree',
-        'nrmse_test',
-        'best_val_loss',
-        'train_time',
-        'total_epochs',
-        'dc_pf'
-    ]
-    performance_results = []
-    i = 1
-    total = len(test_cases)*len(variations)
-    print('\nCalculating Performance Metrics')
-    for train_grid, test_grid in test_cases:
-        for add_cycles, add_path_lengths in variations:
-            print(f'\nIteration {i}/{total}')
-            nrmse_test, best_val_loss, train_time, total_epochs = \
-                evaluate_performance(data_dir=DATA_DIR,
-                              model_class=model_class,
-                              training_grid_codes=[train_grid],
-                              testing_grid_codes=[test_grid],
-                              batch_size=batch_size,
-                              epochs=epochs,
-                              shuffle=False,
-                              add_cycles=add_cycles,
-                              add_path_lengths=add_path_lengths,
-                              log_dir=log_dir,
-                              plot=plot,
-                              save_model=save_model,
-                              experiment_id=i)
-            performance_results.append(
-                (
-                    train_grid,
-                    test_grid,
-                    add_cycles,
-                    add_path_lengths,
-                    True, # degree
-                    nrmse_test,
-                    best_val_loss,
-                    train_time,
-                    total_epochs,
-                    False # dc_pf
+        # Variations of each pairwise comparison (add_cycles, add_path_lengths, add_degree)
+        variations = [(False, False, False), # none
+                    (True, True, True), # all
+                    (True, False, False), # cycles
+                    (False, True, False), # path lengths
+                    (False, False, True)] # degree
+
+        # Run the training and test for every combination, and save results in df
+        column_names = [
+            'training_grid',
+            'testing_grid',
+            'cycles',
+            'path_lengths',
+            'degree',
+            'nrmse_test',
+            'best_val_loss',
+            'train_time',
+            'total_epochs'
+        ]
+        results = []
+        i = 1
+        total = len(test_cases)*len(variations)
+        print('\nCalculating Performance Metrics')
+        for train_grid, test_grid in test_cases:
+            for add_cycles, add_path_lengths, add_degree in variations:
+                print(f'\nIteration {i}/{total}')
+                nrmse_test, best_val_loss, train_time, total_epochs = \
+                    evaluate_performance(data_dir=DATA_DIR,
+                                model_class=model_class,
+                                training_grid_codes=[train_grid],
+                                testing_grid_codes=[test_grid],
+                                batch_size=batch_size,
+                                epochs=epochs,
+                                shuffle=False,
+                                add_cycles=add_cycles,
+                                add_path_lengths=add_path_lengths,
+                                add_degree=add_degree,
+                                log_dir=log_dir,
+                                plot=plot,
+                                save_model=save_model,
+                                eval_only=eval_only,
+                                load_model_dir=load_model_dir,
+                                experiment_id=i)
+                results.append(
+                    (
+                        train_grid,
+                        test_grid,
+                        add_cycles,
+                        add_path_lengths,
+                        add_degree,
+                        nrmse_test,
+                        best_val_loss,
+                        train_time,
+                        total_epochs
+                    )
                 )
-            )
-            print(f'\tBest val loss: {best_val_loss}\n\tNRMSE: {nrmse_test}')
-            i += 1
-        if args.with_dc_pf:
-            print('\nEvaluating dc opf...')
-            nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, test_grid)
-            print('...complete')
-            performance_results.append(
+                print(f'\tBest val loss: {best_val_loss}\n\tNRMSE: {nrmse_test}')
+                i += 1
+        results_df = pd.DataFrame(results, columns=column_names)
+
+        if save_results and log_dir:
+            results_file = os.path.join(log_dir, 'results_tl.csv')
+            results_df.to_csv(results_file)
+            print(f'\nSaved TL results to: {results_file}')
+
+    if args.dc_pf:
+        column_names = [
+            'testing_grid',
+            'nrmse_test'
+        ]
+        results = []
+        print('\nEvaluating dc pf...')
+        for testing_grid in tqdm(grids_to_compare):
+            nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, testing_grid)
+            results.append(
                 (
-                    'N/A', # train_grid
-                    test_grid,
-                    False, # add_cycles
-                    False, # add_path_lengths
+                    testing_grid,
                     nrmse_dc_pf,
-                    np.nan, # best_val_loss
-                    np.nan, # train_time
-                    np.nan, # total_epochs
-                    True # dc_pf
                 )
             )
-    results_df = pd.DataFrame(performance_results, columns=column_names)
+        results_df = pd.DataFrame(results, columns=column_names)
+        if save_results and log_dir:
+            results_file = os.path.join(log_dir, 'results_tl_dc_pf.csv')
+            results_df.to_csv(results_file)
+            print(f'\nSaved DC PF results to: {results_file}')
 
-    # Save all results intermediately before we do next step.
-    results_file = None
-    if log_dir:
-        results_file = os.path.join(log_dir, 'results_tl.csv')
-    if save_results and results_file:
-        results_df.to_csv(results_file)
-        print(f'\nSaved TL results to: {results_file}')
-
-    if args.with_mmd:
+    if args.mmd:
         # Compare MMDs between train and test sets, and add to results df
         print('Calculating MMDs...')
         test_cases = get_mmd_test_cases(grids_to_compare)
-        results_df['mmd_degree'] = np.nan
-        results_df['mmd_laplacian'] = np.nan
+        column_names = [
+            'training_grid',
+            'testing_grid',
+            'mmd_degree',
+            'mmd_laplacian'
+        ]
+        results = []
         for train_grid, test_grid in tqdm(test_cases):
             mmd_degree, mmd_laplacian = \
                 evaluate_tl_mmd(data_dir=DATA_DIR,
                                 training_grid_codes=[train_grid],
                                 testing_grid_codes=[test_grid])
 
-            # Since distance is symmetric, check both directions.
-            results_df.loc[
-                (
-                    (results_df['training_grid'] == train_grid) &
-                    (results_df['testing_grid'] == test_grid)
-                ) |
-                (
-                    (results_df['training_grid'] == test_grid) &
-                    (results_df['testing_grid'] == train_grid)
-                ),
-                ['mmd_degree', 'mmd_laplacian']] = mmd_degree, mmd_laplacian
+            results.append(
+                (train_grid, test_grid, mmd_degree, mmd_laplacian)
+            )
 
-        # Save the rest of the results with mmd
-        if save_results and results_file:
+        results_df = pd.DataFrame(results, columns=column_names)
+        if save_results and log_dir:
+            results_file = os.path.join(log_dir, 'results_tl_mmd.csv')
             results_df.to_csv(results_file)
-            print(f'Saved TL results w/ mmd to: {results_file}')
+            print(f'\nSaved MMD results to: {results_file}')
 
     print("\nTraining complete")
