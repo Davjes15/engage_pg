@@ -62,6 +62,7 @@ if __name__ == '__main__':
         # Variations of each pairwise comparison (add_cycles, add_path_lengths, add_degree)
         variations = [(False, False, False), # none
                     (True, True, True), # all
+                    (True, True, False), # cycles + path lengths
                     (True, False, False), # cycles
                     (False, True, False), # path lengths
                     (False, False, True)] # degree
