@@ -102,7 +102,7 @@ def get_dataloaders(data_dir,
                                     init_dc=init_dc,
                                     cycles=add_cycles,
                                     path_lengths=add_path_lengths,
-                                    add_degree=add_degree)
+                                    degree=add_degree)
         train_split, val_split = random_split(train_dataset, TRAIN_VAL_SPLIT)
 
         loader_train = DataLoader(train_split,
@@ -117,7 +117,7 @@ def get_dataloaders(data_dir,
                                             init_dc=init_dc,
                                             cycles=add_cycles,
                                             path_lengths=add_path_lengths,
-                                            add_degree=add_degree),
+                                            degree=add_degree),
                                 batch_size=batch_size,
                                 shuffle=shuffle)
     return loader_train, loader_val, loader_test
