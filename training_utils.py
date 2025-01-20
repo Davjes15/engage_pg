@@ -250,29 +250,75 @@ def nrmse_loss(y_pred, y_real):
     nrmse = torch.mean(sqrt_n_mean) # take mean across features
     return nrmse
 
+def nrmse_range(y_true, y_pred):
+    """
+    NRMSE normalized by the range of each dimension.
+    """
+    rmse = torch.sqrt(torch.mean((y_true - y_pred) ** 2))  # RMSE
+    range_per_dim = y_true.max(dim=0).values - y_true.min(dim=0).values  # Range per dimension
+    avg_range = torch.mean(range_per_dim)  # Average range across dimensions
+    return rmse / avg_range
+
+def nrmse_mean(y_true, y_pred):
+    """
+    NRMSE normalized by the mean of each dimension.
+    """
+    rmse = torch.sqrt(torch.mean((y_true - y_pred) ** 2))  # RMSE
+    mean_per_dim = y_true.mean(dim=0)  # Mean per dimension
+    avg_mean = torch.mean(mean_per_dim)  # Average mean across dimensions
+    return rmse / avg_mean
+
+def nrmse_std(y_true, y_pred):
+    """
+    NRMSE normalized by the standard deviation of each dimension.
+    """
+    rmse = torch.sqrt(torch.mean((y_true - y_pred) ** 2))  # RMSE
+    std_per_dim = y_true.std(dim=0, unbiased=True)  # Standard deviation per dimension
+    avg_std = torch.mean(std_per_dim)  # Average standard deviation across dimensions
+    return rmse / avg_std
+
 def test(model,
          device,
          loader_test):
     model.eval()
-    nrmse_test = 0
+    nrmse_test, nrmse_test_range, nrmse_test_mean, nrmse_test_std = 0,0,0,0
     for batch_test in loader_test:
         batch_test = batch_test.to(device)
         pred = model(batch_test)
         loss = nrmse_loss(pred, batch_test.y)
         nrmse_test += loss.item()*batch_test.num_graphs
-    nrmse_test /= len(loader_test.dataset)
+        loss = nrmse_range(pred, batch_test.y)
+        nrmse_test_range += loss.item()*batch_test.num_graphs
+        loss = nrmse_mean(pred, batch_test.y)
+        nrmse_test_mean += loss.item()*batch_test.num_graphs
+        loss = nrmse_std(pred, batch_test.y)
+        nrmse_test_std += loss.item()*batch_test.num_graphs
 
-    return nrmse_test
+    nrmse_test /= len(loader_test.dataset)
+    nrmse_test_range /= len(loader_test.dataset)
+    nrmse_test_mean /= len(loader_test.dataset)
+    nrmse_test_std /= len(loader_test.dataset)
+
+    return nrmse_test, nrmse_test_range, nrmse_test_mean, nrmse_test_std
 
 def test_dc_pf(device, loader_test):
-    nrmse_test = 0
+    nrmse_test, nrmse_test_range, nrmse_test_mean, nrmse_test_std = 0,0,0,0
     for dc_batch in loader_test:
         dc_batch.to(device)
         loss = nrmse_loss(dc_batch.dc_pf, dc_batch.y)
         nrmse_test += loss.item()*dc_batch.num_graphs
+        loss = nrmse_range(dc_batch.dc_pf, dc_batch.y)
+        nrmse_test_range += loss.item()*dc_batch.num_graphs
+        loss = nrmse_mean(dc_batch.dc_pf, dc_batch.y)
+        nrmse_test_mean += loss.item()*dc_batch.num_graphs
+        loss = nrmse_std(dc_batch.dc_pf, dc_batch.y)
+        nrmse_test_std += loss.item()*dc_batch.num_graphs
     nrmse_test /= len(loader_test.dataset)
+    nrmse_test_range /= len(loader_test.dataset)
+    nrmse_test_mean /= len(loader_test.dataset)
+    nrmse_test_std /= len(loader_test.dataset)
 
-    return nrmse_test
+    return nrmse_test, nrmse_test_range, nrmse_test_mean, nrmse_test_std
 
 def evaluate_mmd(training_dataset, testing_dataset):
     graphs_train = [get_networkx_graph(pyg_graph, include_features=False)
