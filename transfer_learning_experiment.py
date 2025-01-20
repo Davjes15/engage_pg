@@ -182,11 +182,11 @@ def evaluate_performance(data_dir,
                     fig_id=experiment_id)
 
     # Test the model
-    nrmse_test, nrmse_range, nrmse_mean, nrmse_std = test(model=model,
+    nrmse_test = test(model=model,
                       device=device,
                       loader_test=loader_test)
     
-    return nrmse_test, nrmse_range, nrmse_mean, nrmse_std, best_val_loss, train_time, total_epochs
+    return nrmse_test, best_val_loss, train_time, total_epochs
 
 def evaluate_dc_pf(data_dir, testing_grid_code):
     # Get data loaders
@@ -198,8 +198,8 @@ def evaluate_dc_pf(data_dir, testing_grid_code):
         add_path_lengths=False)
     
     device = get_device()
-    nrmse_test, nrmse_range, nrmse_mean, nrmse_std = test_dc_pf(device, loader_test)
-    return nrmse_test, nrmse_range, nrmse_mean, nrmse_std
+    nrmse_test = test_dc_pf(device, loader_test)
+    return nrmse_test
 
 def evaluate_tl_mmd(data_dir,
                     training_grid_codes,
@@ -264,7 +264,6 @@ if __name__ == '__main__':
             'path_lengths',
             'degree',
             'nrmse_test',
-            'nrmse_range', 'nrmse_mean', 'nrmse_std',
             'best_val_loss',
             'train_time',
             'total_epochs'
@@ -276,7 +275,7 @@ if __name__ == '__main__':
         for train_grid, test_grid in test_cases:
             for add_cycles, add_path_lengths, add_degree in variations:
                 print(f'\nIteration {i}/{total}')
-                nrmse_test, nrmse_range, nrmse_mean, nrmse_std, best_val_loss, train_time, total_epochs = \
+                nrmse_test, best_val_loss, train_time, total_epochs = \
                     evaluate_performance(data_dir=DATA_DIR,
                                 model_class=model_class,
                                 training_grid_codes=[train_grid],
@@ -301,7 +300,6 @@ if __name__ == '__main__':
                         add_path_lengths,
                         add_degree,
                         nrmse_test,
-                        nrmse_range, nrmse_mean, nrmse_std,
                         best_val_loss,
                         train_time,
                         total_epochs
@@ -319,18 +317,16 @@ if __name__ == '__main__':
     if args.dc_pf:
         column_names = [
             'testing_grid',
-            'nrmse_test',
-            'nrmse_range', 'nrmse_mean', 'nrmse_std'
+            'nrmse_test'
         ]
         results = []
         print('\nEvaluating dc pf...')
         for testing_grid in tqdm(grids_to_compare):
-            nrmse_dc_pf, nrmse_range, nrmse_mean, nrmse_std = evaluate_dc_pf(DATA_DIR, testing_grid)
+            nrmse_dc_pf = evaluate_dc_pf(DATA_DIR, testing_grid)
             results.append(
                 (
                     testing_grid,
                     nrmse_dc_pf,
-                    nrmse_range, nrmse_mean, nrmse_std
                 )
             )
         results_df = pd.DataFrame(results, columns=column_names)
