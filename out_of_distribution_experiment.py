@@ -10,12 +10,11 @@ from training_utils import (
     setup_pytorch,
 )
 from graph_utils import get_dist_grid_codes
-from transfer_learning_experiment import (
-    get_model_save_path,
+from cross_context_experiment import (
     parse_args,
     evaluate_performance,
     evaluate_dc_pf,
-    evaluate_tl_mmd
+    evaluate_cc_mmd
 )
 
 def get_performance_test_cases(grids_to_compare):
@@ -156,9 +155,11 @@ if __name__ == '__main__':
         results = []
         for train_grids, target in tqdm(test_cases):
             mmd_degree, mmd_laplacian = \
-                evaluate_tl_mmd(data_dir=DATA_DIR,
+                evaluate_cc_mmd(data_dir=DATA_DIR,
                                 training_grid_codes=train_grids,
-                                testing_grid_codes=[target])
+                                testing_grid_codes=[target],
+                                sigma_degree=1e2,
+                                sigma_laplacian=1e-2)
 
             results.append(
                 (target, mmd_degree, mmd_laplacian)

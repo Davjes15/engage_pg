@@ -201,9 +201,11 @@ def evaluate_dc_pf(data_dir, testing_grid_code):
     nrmse_test = test_dc_pf(device, loader_test)
     return nrmse_test
 
-def evaluate_tl_mmd(data_dir,
+def evaluate_cc_mmd(data_dir,
                     training_grid_codes,
-                    testing_grid_codes):
+                    testing_grid_codes,
+                    sigma_degree=1e2,
+                    sigma_laplacian=1e-2):
     # Get data loaders
     loader_train, loader_val, loader_test = get_dataloaders(
         data_dir=data_dir,
@@ -214,7 +216,9 @@ def evaluate_tl_mmd(data_dir,
     
     mmd_degree, mmd_laplacian = evaluate_mmd(
         list(loader_test.dataset) + list(loader_val),
-        list(loader_train.dataset)
+        list(loader_train.dataset),
+        sigma_degree=sigma_degree,
+        sigma_laplacian=sigma_laplacian
         )
     
     return mmd_degree, mmd_laplacian
@@ -310,9 +314,9 @@ if __name__ == '__main__':
         results_df = pd.DataFrame(results, columns=column_names)
 
         if save_results and log_dir:
-            results_file = os.path.join(log_dir, 'results_tl.csv')
+            results_file = os.path.join(log_dir, 'results_cc.csv')
             results_df.to_csv(results_file)
-            print(f'\nSaved TL results to: {results_file}')
+            print(f'\nSaved CC results to: {results_file}')
 
     if args.dc_pf:
         column_names = [
@@ -331,7 +335,7 @@ if __name__ == '__main__':
             )
         results_df = pd.DataFrame(results, columns=column_names)
         if save_results and log_dir:
-            results_file = os.path.join(log_dir, 'results_tl_dc_pf.csv')
+            results_file = os.path.join(log_dir, 'results_cc_dc_pf.csv')
             results_df.to_csv(results_file)
             print(f'\nSaved DC PF results to: {results_file}')
 
@@ -348,9 +352,11 @@ if __name__ == '__main__':
         results = []
         for train_grid, test_grid in tqdm(test_cases):
             mmd_degree, mmd_laplacian = \
-                evaluate_tl_mmd(data_dir=DATA_DIR,
+                evaluate_cc_mmd(data_dir=DATA_DIR,
                                 training_grid_codes=[train_grid],
-                                testing_grid_codes=[test_grid])
+                                testing_grid_codes=[test_grid],
+                                sigma_degree=1e1,
+                                sigma_laplacian=1e-2)
 
             results.append(
                 (train_grid, test_grid, mmd_degree, mmd_laplacian)
@@ -358,7 +364,7 @@ if __name__ == '__main__':
 
         results_df = pd.DataFrame(results, columns=column_names)
         if save_results and log_dir:
-            results_file = os.path.join(log_dir, 'results_tl_mmd.csv')
+            results_file = os.path.join(log_dir, 'results_cc_mmd.csv')
             results_df.to_csv(results_file)
             print(f'\nSaved MMD results to: {results_file}')
 

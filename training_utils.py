@@ -277,14 +277,16 @@ def test_dc_pf(device, loader_test):
 
     return nrmse_test
 
-def evaluate_mmd(training_dataset, testing_dataset):
+def evaluate_mmd(training_dataset,
+                 testing_dataset,
+                 sigma_degree=1e2,
+                 sigma_laplacian=1e-2):
     graphs_train = [get_networkx_graph(pyg_graph, include_features=False)
                     for pyg_graph in training_dataset]
     graphs_test = [get_networkx_graph(pyg_graph, include_features=False)
                    for pyg_graph in testing_dataset]
 
     # Degree Distrubtion
-    sigma_degree = 1e3
     mmd_degree = ggme_evaluate_mmd(
         graphs_dist_1=graphs_train,
         graphs_dist_2=graphs_test,
@@ -295,7 +297,6 @@ def evaluate_mmd(training_dataset, testing_dataset):
         sigma=sigma_degree)
 
     # Laplacian Spectrum
-    sigma_laplacian = 1e-2
     mmd_laplacian = ggme_evaluate_mmd(
         graphs_dist_1=graphs_train,
         graphs_dist_2=graphs_test,

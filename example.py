@@ -2,7 +2,7 @@ import argparse
 
 from models import GCN, ARMA_GNN
 from training_utils import create_log_dir
-from transfer_learning_experiment import evaluate_performance
+from cross_context_experiment import evaluate_performance
 
 def parse_args():
     parser = argparse.ArgumentParser()

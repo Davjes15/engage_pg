@@ -30,7 +30,7 @@ In general, to generate a dataset, you can use `graph_gen.py`. Running this with
 python graph_gen.py --dry_run
 ```
 
-Now let us generate a tiny dataset for distribution grids for the "tomorrow" scenario from simbench, and run the transfer learning experiment on it. To do this, you will first need to run:
+Now let us generate a tiny dataset for distribution grids for the "tomorrow" scenario from simbench, and run the cross-context experiment on it. To do this, you will first need to run:
 
 ```
 python graph_gen.py --size 5 --scenario 1
@@ -38,8 +38,29 @@ python graph_gen.py --size 5 --scenario 1
 
 This will generate a training dataset of 5 grids for each reference distribution grid in the "tomorrow" scenario. It will also print some messages telling you where the files have been stored. You will want to remember the base data directory, under which the grid names are stored. For example, if you receive print messages such as `"Saving dataset in outputs/2025-01-15_10:58:53/1-MV-urban--1-no_sw/train/dataset.pt... completed"`, then you base data directory would be `outputs/2025-01-15_10:58:53/`.
 
-After this dataset is generated, the transfer learning experiment can be run using the `data_dir` you noted from earlier:
+After this dataset is generated, the cross-context experiment can be run using the `data_dir` you noted from earlier.
 ```
-python transfer_learning_experiment.py --data_dir <data_dir> --model gcn --epochs 1 --save_results --scenario 1
+python cross_context_experiment.py --data_dir <data_dir> --model gcn --epochs 1 --save_results --scenario 1
 ```
 
+## Reproduce Results from the paper
+
+The data directory is available at: TODO. Once downloaded, you can move/rename the directory however you like. For example, you can make the data directory path: `data/generalization_test_data/`.
+
+Using this data, you can run the experiments using the `cross_context_experiment.py` and `out_of_distribution_experiment.py` scripts. To get an idea of all the scrip arguments, you can run either with the -h flag, i.e. `python cross_context_experiment.py -h`.
+
+To reproduce the results from our paper, you can use the following commands:
+
+```
+python cross_context_experiment.py --data_dir <data_dir> --model gcn --epochs 1 --save_results --scenario 1
+```
+
+```
+python cross_context_experiment.py --data_dir <data_dir> --model gcn --epochs 1 --save_results --scenario 1
+```
+
+These scripts will produce results files for you and will print their saved locations. For example, for the OOD experiment, you will see something like `out/.../results_ood.csv`, `out/.../results_ood_dc_pf.csv`, and `out/.../results_ood_mmd.csv`.
+
+***Note:*** If you want to skip the DC PF and MMD calculations (because they are independent of our PF models), you can remove the `--dc_pf` and `--mmd` flags, since the results are all already recorded in `dc_pf_data.csv`, `cc_mmds_data.csv`, and `ood_mmds_data.csv`.
+
+The results of these output files are then all analyzed in `results_analysis.ipynb`, where the g_score is also calculated. Towards the top of the notebook, you will need to input the paths to your own result files.

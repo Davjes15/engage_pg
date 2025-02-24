@@ -123,7 +123,6 @@ def get_edge_features(net):
         # Transpose to make into proper (2, 2E format).
         edge_index = edge_index.reshape(-1, 2).T
 
-        # TODO: Decide if use r/x or G/B??
         r = net.line['r_ohm_per_km'].values * net.line['length_km'].values
         x = net.line['x_ohm_per_km'].values * net.line['length_km'].values
 
@@ -154,23 +153,21 @@ def get_edge_features(net):
         return edge_index, edge_features
 
     def get_trafo_features(net):
-        # TODO: Add charging susceptance - b (p.u.), transformer tap ratio - tau
-
         # Similar to get_line_features.
         edge_index = net.trafo.loc[:, ['hv_bus', 'lv_bus',
                                        'lv_bus', 'hv_bus']].values
         edge_index = edge_index.reshape(-1, 2).T
 
         # Impedance calculated as shown in pandapower docs:
-        # https://pandapower.readthedocs.io/en/v2.2.1/elements/trafo.html#impedance-values
+        # https://pandapower.readthedocs.io/en/v2.14.11/elements/trafo.html#impedance-values
         # where vk_percent is short-circuit voltage and vkr_percent is the real
         # part of short-circuit voltage (%).
-        z_pu = (net.trafo['vk_percent'].values / 100)*(1000 / net.trafo['sn_mva'].values)
-        r_pu = (net.trafo['vkr_percent'].values / 100)*(1000 / net.trafo['sn_mva'].values)
+        z_pu = (net.trafo['vk_percent'].values / 100)*(net.sn_mva / net.trafo['sn_mva'].values)
+        r_pu = (net.trafo['vkr_percent'].values / 100)*(net.sn_mva / net.trafo['sn_mva'].values)
         x_pu = np.sqrt(np.square(z_pu) - np.square(r_pu))
 
         # Add phase shift angle (deg) as additional feature.
-        phase_shift = net.trafo['vk_percent'].values
+        phase_shift = net.trafo['shift_degree'].values
         
         # Repeat the features (to match edge_index) and create feature matrix.
         e = edge_index.shape[1] # b/c coo matrix
