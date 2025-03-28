@@ -113,7 +113,7 @@ def get_node_features(net):
 
 def get_edge_features(net):
     # List of edge features
-    #   e: np.array([trafo?, r_pu, x_pu, phase_shift])
+    #   e: np.array([trafo?, r_pu, x_pu, sc_voltage])
 
     def get_line_features(net):
         # Undirected graph so need to add both directions to edge_index.
@@ -141,13 +141,13 @@ def get_edge_features(net):
         r_pu = r_pu.repeat(2)
         x_pu = x_pu.repeat(2)
 
-        # Add encoding for a line and pad with nan to account for missing phase
-        # shift.
+        # Add encoding for a line and pad with nan to account for missing short
+        # circuit voltage.
         e = edge_index.shape[1] # b/c coo matrix
         edge_features = np.vstack([np.zeros(e),         # trafo?
                                    r_pu,                # r_pu
                                    x_pu,                # x_pu
-                                   np.nan*np.ones(e)    # phase_shift
+                                   np.nan*np.ones(e)    # sc_voltage
                                    ]).T
 
         return edge_index, edge_features
@@ -166,15 +166,15 @@ def get_edge_features(net):
         r_pu = (net.trafo['vkr_percent'].values / 100)*(net.sn_mva / net.trafo['sn_mva'].values)
         x_pu = np.sqrt(np.square(z_pu) - np.square(r_pu))
 
-        # Add phase shift angle (deg) as additional feature.
-        phase_shift = net.trafo['shift_degree'].values
+        # Add relative short-circuit voltage as additional feature.
+        sc_voltage = net.trafo['vk_percent'].values
         
         # Repeat the features (to match edge_index) and create feature matrix.
         e = edge_index.shape[1] # b/c coo matrix
         edge_features = np.vstack([np.ones(e),              # trafo?
                                    r_pu.repeat(2),          # r_pu
                                    x_pu.repeat(2),          # x_pu
-                                   phase_shift.repeat(2)    # phase_shift
+                                   sc_voltage.repeat(2)     # sc_voltage
                                    ]).T
 
         return edge_index, edge_features
