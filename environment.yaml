@@ -1,4 +1,4 @@
-name: graph-pf
+name: engage
 channels:
   - conda-forge
 dependencies:
