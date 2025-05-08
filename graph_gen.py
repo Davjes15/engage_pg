@@ -297,7 +297,7 @@ if __name__ == '__main__':
             # Data dimensions
             #   x: (N, 7), where 7 are [Slack?, PV?, PQ?, p_mw, q_mvar, vm_pu, va_degree]
             #   edge_index: (2, 2E)
-            #   edge_attr: (2E, 5), where 5 are [trafo?, r_pu, x_pu, length, phase_shift]
+            #   edge_attr: (2E, 5), where 5 are [trafo?, r_pu, x_pu, length, sc_voltage]
             #   y: (N, 4), where 4 are [p_mw, q_mvar, vm_pu, va_degree]
             #   dc_pf: (N, 4), where 4 are [p_mw, q_mvar, vm_pu, va_degree]
             #
