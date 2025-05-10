@@ -71,18 +71,17 @@ Each Data object in the dataset list has the following attributes and dimensions
 
 ### Running Experiments
 
-After we have a dataset, we can run the `Cross-Context` and `Out-of-Distribution` experiments using the appropriate data location, or `data_dir`, that you noted from earlier. You can run each script using the `-h` command to see the list of potential arguments.
+After we have a dataset, we can run experiments. A sample experiment script can be found in `example.py`. This script trains a model on one LV grid and tests it on another. For the script, make sure to specify the appropriate data location, or `data_dir`. For example, we can train the sample gcn model using the dataset you generated above and the example script. Assuming the `data_dir` for your self-generated data is `outputs/2025-01-15_10:58:53/`, we can use the following:
+```
+python example.py --data_dir outputs/2025-01-15_10:58:53/ --model gcn --epochs 1 --scenario 1
+```
 
+If you want to test the original paper's `Cross-Context` and `Out-of-Distribution` experiments, these are also available. You can run each script using the `-h` command to see the list of potential arguments.
 ```
 python cross_context_experiment.py -h
 ```
 ```
 python out_of_distribution_experiment.py -h
-```
-
-For example, we can train the sample gcn model using the dataset you generated above. Assuming the `data_dir` for your self-generated data is `outputs/2025-01-15_10:58:53/`, we can use the following:
-```
-python cross_context_experiment.py --data_dir outputs/2025-01-15_10:58:53/ --model gcn --epochs 1 --save_results --scenario 1
 ```
 
 ### Benchmarking a New Model
