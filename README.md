@@ -97,7 +97,7 @@ To benchmark a new model, you will have to:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15464235.svg)](https://doi.org/10.5281/zenodo.15464235)
 
-The data directory is available at the link above. Once downloaded, you can move/rename the directory however you like. For example, you can rename the data directory path to `data/ENGAGE_dataset/`. Using this data, you can run the experiments using the `cross_context_experiment.py` and `out_of_distribution_experiment.py` scripts.
+The evaluation dataset is available at the link above. Once downloaded, you can move/rename the directory however you like. For example, you can rename the data directory path to `data/ENGAGE_dataset/`. Using this data, you can run the experiments using the `cross_context_experiment.py` and `out_of_distribution_experiment.py` scripts.
 
 To reproduce the results from our paper, you can use the following commands:
 
