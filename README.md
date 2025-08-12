@@ -57,9 +57,9 @@ Each Data object in the dataset list has the following attributes and dimensions
   - E is the number of lines in the network
   - 2 because each the edge_index list assumes directed edges
 - *edge_attr*:
-  - Dimension: (2E, 5)
+  - Dimension: (2E, 4)
   - E is the number of lines in the network
-  - There are 5 edge features: [trafo?, r_pu, x_pu, length, sc_voltage]
+  - There are 4 edge features: [trafo?, r_pu, x_pu, sc_voltage]
 - *y*:
   - Dimension: (N, 4)
   - N is the number of nodes/buses in the network
