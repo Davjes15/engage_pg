@@ -10,6 +10,7 @@ import torch
 from models import GCN, ARMA_GNN
 from training_utils import (
     create_log_dir,
+    get_generalization_score,
     setup_file_output,
     get_model_save_path,
     setup_pytorch,
@@ -361,11 +362,85 @@ if __name__ == '__main__':
             results.append(
                 (train_grid, test_grid, mmd_degree, mmd_laplacian)
             )
+            # MMD is symmetrical, so add both entries
+            results.append(
+                (test_grid, train_grid, mmd_degree, mmd_laplacian)
+            )
 
         results_df = pd.DataFrame(results, columns=column_names)
         if save_results and log_dir:
             results_file = os.path.join(log_dir, 'results_cc_mmd.csv')
             results_df.to_csv(results_file)
             print(f'\nSaved MMD results to: {results_file}')
+
+    if args.mmd and not args.skip_experiment:
+        # Correlate MMDs with performance metrics
+        print('Correlating MMDs with performance metrics to get g score...')
+        perf_file = os.path.join(log_dir, 'results_cc.csv')
+        mmd_file = os.path.join(log_dir, 'results_cc_mmd.csv')
+        perf_df = pd.read_csv(perf_file, index_col=0)
+        mmd_df = pd.read_csv(mmd_file, index_col=0)
+
+        gen_stats = pd.DataFrame(columns=['model',
+                                          'mean_nrmse',
+                                          'std_nrmse',
+                                          'mmd_range_degree',
+                                          'mmd_range_laplacian',
+                                          'g_score_degree',
+                                          'g_score_laplacian'])
+
+        if args.dc_pf:
+            dc_pf_file = os.path.join(log_dir, 'results_cc_dc_pf.csv')
+            dc_pf_df = pd.read_csv(dc_pf_file, index_col=0)
+            mean_nrmse, std_nrmse, mmd_range_degree, g_score_degree = get_generalization_score(np.repeat(0, len(dc_pf_df)), dc_pf_df['nrmse_test'].to_numpy())
+            _, _, mmd_range_laplacian, g_score_laplacian = get_generalization_score(np.repeat(0, len(dc_pf_df)), dc_pf_df['nrmse_test'].to_numpy())
+
+            gen_stats.loc[len(gen_stats)] = [
+                'dc_pf',
+                mean_nrmse,
+                std_nrmse,
+                mmd_range_degree,
+                mmd_range_laplacian,
+                g_score_degree,
+                g_score_laplacian
+            ]
+
+        models_variations = {
+            # (cycles, path_lengths, degree)
+            'ref': (False, False, False),
+            'degree': (False, False, True),
+            'cycles': (True, False, False),
+            'paths': (False, True, False),
+        }
+
+        def get_model_variation_df(performance_df, cycles, path_lengths, degree):
+            df = performance_df
+            data_df = df[(df['cycles'] == cycles) & (df['path_lengths'] == path_lengths) & (df['degree'] == degree)]
+            return data_df
+
+        # Calculate generalization statistics for each model variation
+        for name, config in models_variations.items():
+            model_df = get_model_variation_df(perf_df, *config)
+            model_df = model_df.merge(mmd_df,
+                                  left_on=['training_grid', 'testing_grid'],
+                                  right_on=['training_grid', 'testing_grid'],
+                                  how='left')
+            mean_nrmse, std_nrmse, mmd_range_degree, g_score_degree = get_generalization_score(model_df['mmd_degree'].to_numpy(), model_df['nrmse_test'].to_numpy())
+            _, _, mmd_range_laplacian, g_score_laplacian = get_generalization_score(model_df['mmd_laplacian'].to_numpy(), model_df['nrmse_test'].to_numpy())
+
+            gen_stats.loc[len(gen_stats)] = [
+                name,
+                mean_nrmse,
+                std_nrmse,
+                mmd_range_degree,
+                mmd_range_laplacian,
+                g_score_degree,
+                g_score_laplacian
+            ]
+
+        if save_results and log_dir:
+            results_file = os.path.join(log_dir, 'results_cc_gen_stats.csv')
+            gen_stats.to_csv(results_file)
+            print(f'\nSaved generalization statistics to: {results_file}')
 
     print("\nTraining complete")

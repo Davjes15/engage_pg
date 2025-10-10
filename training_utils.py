@@ -307,3 +307,23 @@ def evaluate_mmd(training_dataset,
         sigma=sigma_laplacian)
     
     return mmd_degree, mmd_laplacian
+
+def get_percentile_bounds(nrmses, bounds=2):
+    p_min = np.percentile(nrmses, bounds)
+    p_max = np.percentile(nrmses, 100-bounds)
+    return p_min, p_max
+
+def get_generalization_score(mmds, nrmses, alpha=1.0):
+    # Calculate the generalization score and return its components.
+    eps = 1e-8
+    p_min, p_max = get_percentile_bounds(nrmses)
+    p_where = (nrmses <= p_max) & (nrmses >= p_min)
+    min_mmd_percentile = mmds.min(where=p_where, initial=mmds.max())
+    max_mmd_percentile = mmds.max(where=p_where, initial=mmds.min())
+    mmd_range_percentile = max_mmd_percentile - min_mmd_percentile
+    mean_nrmse_percentile = nrmses.mean(where=p_where)
+    std_rmse_percentile = nrmses.std(where=p_where)
+
+    score = mean_nrmse_percentile + alpha*std_rmse_percentile*(np.log(mmd_range_percentile + 1) / (mmd_range_percentile + eps))
+
+    return mean_nrmse_percentile, std_rmse_percentile, mmd_range_percentile, score
