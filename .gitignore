@@ -8,3 +8,6 @@ outputs/
 in_progress/
 out/
 figures/
+
+# Virtual environment
+engage/
