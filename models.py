@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch_geometric.nn import GCNConv, ARMAConv
+from torch_geometric.nn import GCNConv, ARMAConv, GINConv, GATConv, TransformerConv
 from torch.masked import masked_tensor
 
 # =============================================================================
@@ -137,3 +137,154 @@ class GCN(nn.Module):
             pred = self.inference(x, pred)
 
         return pred
+
+
+# GIN (Graph Isomorphism Network) class
+class GIN(nn.Module):
+    def __init__(self, input_dim=7, num_layers=8):
+        super().__init__()
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
+        
+        # Pre-processing layers
+        self.predense1_node = nn.Linear(self.input_dim, 64)
+        self.predense2_node = nn.Linear(64, 64)
+        self.predense1_edge = nn.Linear(4, 16)
+        self.predense2_edge = nn.Linear(16, 1)
+        
+        # GIN layers
+        self.gin_layers = nn.ModuleList([
+            GINConv(nn.Sequential(
+                nn.Linear(64, 64),
+                nn.ReLU(),
+                nn.Linear(64, 64)
+            )) for _ in range(self.num_layers)
+        ])
+        
+        # Post-processing layers
+        self.postdense1 = nn.Linear(64 + self.input_dim, 64)
+        self.postdense2 = nn.Linear(64, 64)
+        
+        # Output layer
+        self.readout = nn.Linear(64, 4)
+    
+    def forward(self, data):
+        x = torch.nan_to_num(data.x, nan=0.0)
+        edge_index = data.edge_index
+        edge_attr = torch.nan_to_num(data.edge_attr, nan=0.0)
+        
+        node_emb = self.leakyReLU(self.predense1_node(x))
+        node_emb = self.leakyReLU(self.predense2_node(node_emb))
+        
+        edge_emb = self.leakyReLU(self.predense1_edge(edge_attr))
+        edge_emb = self.leakyReLU(self.predense2_edge(edge_emb))
+        edge_emb = edge_emb.reshape((-1,))
+        
+        for layer in self.gin_layers:
+            node_emb = self.leakyReLU(layer(x=node_emb, edge_index=edge_index))
+        
+        node_emb = torch.cat([x, node_emb], 1)
+        node_emb = self.leakyReLU(self.postdense1(node_emb))
+        node_emb = self.leakyReLU(self.postdense2(node_emb))
+        
+        return self.readout(node_emb)
+
+
+# GAT (Graph Attention Network) class
+class GAT(nn.Module):
+    def __init__(self, input_dim=7, num_layers=8, num_heads=4):
+        super().__init__()
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
+        
+        # Pre-processing layers
+        self.predense1_node = nn.Linear(self.input_dim, 64)
+        self.predense2_node = nn.Linear(64, 64)
+        self.predense1_edge = nn.Linear(4, 16)
+        self.predense2_edge = nn.Linear(16, 1)
+        
+        # GAT layers
+        self.gat_layers = nn.ModuleList([
+            GATConv(64, 64 // num_heads, heads=num_heads, concat=True)
+            for _ in range(self.num_layers)
+        ])
+        
+        # Post-processing layers
+        self.postdense1 = nn.Linear(64 + self.input_dim, 64)
+        self.postdense2 = nn.Linear(64, 64)
+        
+        # Output layer
+        self.readout = nn.Linear(64, 4)
+    
+    def forward(self, data):
+        x = torch.nan_to_num(data.x, nan=0.0)
+        edge_index = data.edge_index
+        edge_attr = torch.nan_to_num(data.edge_attr, nan=0.0)
+        
+        node_emb = self.leakyReLU(self.predense1_node(x))
+        node_emb = self.leakyReLU(self.predense2_node(node_emb))
+        
+        edge_emb = self.leakyReLU(self.predense1_edge(edge_attr))
+        edge_emb = self.leakyReLU(self.predense2_edge(edge_emb))
+        edge_emb = edge_emb.reshape((-1,))
+        
+        for layer in self.gat_layers:
+            node_emb = self.leakyReLU(layer(x=node_emb, edge_index=edge_index))
+        
+        node_emb = torch.cat([x, node_emb], 1)
+        node_emb = self.leakyReLU(self.postdense1(node_emb))
+        node_emb = self.leakyReLU(self.postdense2(node_emb))
+        
+        return self.readout(node_emb)
+
+
+# Transformer Graph Neural Network class
+class TransformerGNN(nn.Module):
+    def __init__(self, input_dim=7, num_layers=8):
+        super().__init__()
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
+        
+        # Pre-processing layers
+        self.predense1_node = nn.Linear(self.input_dim, 64)
+        self.predense2_node = nn.Linear(64, 64)
+        self.predense1_edge = nn.Linear(4, 16)
+        self.predense2_edge = nn.Linear(16, 1)
+        
+        # Transformer layers
+        self.transformer_layers = nn.ModuleList([
+            TransformerConv(64, 64, heads=4, concat=True)
+            for _ in range(self.num_layers)
+        ])
+        
+        # Post-processing layers
+        self.postdense1 = nn.Linear(64 + self.input_dim, 64)
+        self.postdense2 = nn.Linear(64, 64)
+        
+        # Output layer
+        self.readout = nn.Linear(64, 4)
+    
+    def forward(self, data):
+        x = torch.nan_to_num(data.x, nan=0.0)
+        edge_index = data.edge_index
+        edge_attr = torch.nan_to_num(data.edge_attr, nan=0.0)
+        
+        node_emb = self.leakyReLU(self.predense1_node(x))
+        node_emb = self.leakyReLU(self.predense2_node(node_emb))
+        
+        edge_emb = self.leakyReLU(self.predense1_edge(edge_attr))
+        edge_emb = self.leakyReLU(self.predense2_edge(edge_emb))
+        edge_emb = edge_emb.reshape((-1,))
+        
+        for layer in self.transformer_layers:
+            node_emb = self.leakyReLU(layer(x=node_emb, edge_index=edge_index))
+        
+        node_emb = torch.cat([x, node_emb], 1)
+        node_emb = self.leakyReLU(self.postdense1(node_emb))
+        node_emb = self.leakyReLU(self.postdense2(node_emb))
+        
+        return self.readout(node_emb)
