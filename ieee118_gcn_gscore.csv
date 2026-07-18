@@ -1,0 +1,2 @@
+train_grid,test_grids,model_type,num_test_grids,mean_nrmse,std_nrmse,mmd_range_degree,mmd_range_laplacian,g_score_degree,g_score_laplacian
+IEEE118,"IEEE24,IEEE39,UK",gcn,3,0.202113538980484,0.06837023353137085,0.0208785105861663,0.0,0.26977978724429436,0.202113538980484
